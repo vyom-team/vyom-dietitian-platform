@@ -175,9 +175,15 @@ npm run db:deploy
 npm run dev
 ```
 
-Register at `/register`, confirm by email, then sign in. A new account belongs to
-no organization yet and sees the "no practice linked" state — onboarding is the
-next phase.
+Register at `/register`. A new account belongs to no organization yet and sees
+the "no practice linked" state — onboarding is the next phase.
+
+> **For development, turn off email confirmation.** Supabase's built-in sender
+> allows only **2 emails per hour** and delivers **only to your project's team
+> members**, which makes sign-up painful to iterate on. Go to
+> **Authentication → Sign In / Providers → Email** and uncheck **"Confirm
+> email"**; registration then completes instantly and signs you straight in.
+> Re-enable it before production — the real fix there is custom SMTP.
 
 ### Two things worth knowing
 

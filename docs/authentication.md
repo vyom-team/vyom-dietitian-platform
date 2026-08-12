@@ -111,15 +111,37 @@ into another user's request.
 /register → signUp action → Zod → supabase.auth.signUp
   → auth.users row created
   → trigger creates user_profiles row (same transaction)
-  → confirmation email
-  → /auth/callback → session → /dashboard
+  → then one of two paths, decided by Supabase:
+
+     session returned  →  signed in immediately  →  /dashboard
+     no session        →  confirmation email  →  /auth/callback  →  /dashboard
 ```
 
 `full_name` travels in `options.data` and is read by the trigger. The browser
 never writes to `user_profiles`.
 
+The action branches on `data.session` rather than hard-coding either flow, so
+the same code serves a frictionless development setup and a confirm-by-email
+production setup with no edit in between.
+
 The response is identical whether or not the address was already registered —
 see the account-enumeration note in [security.md](security.md).
+
+#### Turning confirmation off for development
+
+Supabase's **built-in email sender allows 2 messages per hour and delivers only
+to addresses belonging to your project's team**. That makes it close to unusable
+while iterating on sign-up.
+
+For development: **Authentication → Sign In / Providers → Email → uncheck
+"Confirm email"**. Sign-up then completes instantly, no email is sent, and the
+new account is signed straight in.
+
+> **Turn it back on before production.** With confirmation off, anyone can
+> register using an address they do not control — which for a product holding
+> clinical data is not acceptable. The production fix is custom SMTP (30/hour by
+> default, adjustable, no recipient restriction), which is what the email phase
+> configures.
 
 ### Sign in
 

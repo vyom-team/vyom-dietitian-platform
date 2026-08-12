@@ -139,7 +139,7 @@ export async function signUp(
 
   const origin = await getOrigin();
 
-  const { error } = await supabase.auth.signUp({
+  const { data, error } = await supabase.auth.signUp({
     email: parsed.data.email,
     password: parsed.data.password,
     options: {
@@ -152,6 +152,24 @@ export async function signUp(
 
   if (error) {
     return { status: "error", message: messageForError(error, "signUp") };
+  }
+
+  /*
+   * Supabase decides whether confirmation is required, and tells us by whether
+   * it returns a session:
+   *
+   *   session present  → "Confirm email" is off. The account is live and the
+   *                      user is already signed in, so send them straight in.
+   *   session absent   → confirmation is on. The account exists but is dormant
+   *                      until the emailed link is clicked.
+   *
+   * Reading the response rather than hard-coding either behaviour means the
+   * same code serves a frictionless development setup and a confirm-by-email
+   * production setup, with no edit in between.
+   */
+  if (data.session) {
+    revalidatePath("/", "layout");
+    redirect(DEFAULT_SIGNED_IN_PATH);
   }
 
   /*

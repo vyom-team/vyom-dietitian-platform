@@ -1,18 +1,12 @@
 import type { Metadata } from "next";
 
+import { ForgotPasswordForm } from "@/components/auth/forgot-password-form";
 import { AuthCard, AuthLink } from "@/components/layout/auth-card";
-import { Button } from "@/components/ui/button";
-import {
-  Field,
-  FieldDescription,
-  FieldGroup,
-  FieldLabel,
-} from "@/components/ui/field";
-import { Input } from "@/components/ui/input";
+import { AuthNotConfigured } from "@/components/auth/auth-not-configured";
+import { isAuthConfigured } from "@/config/env";
 
 export const metadata: Metadata = { title: "Reset your password" };
 
-/** Layout only. Sending reset email requires the mail service. */
 export default function ForgotPasswordPage() {
   return (
     <AuthCard
@@ -20,24 +14,7 @@ export default function ForgotPasswordPage() {
       description="We'll email you a link to set a new one."
       footer={<AuthLink href="/login">Back to sign in</AuthLink>}
     >
-      <FieldGroup>
-        <Field>
-          <FieldLabel htmlFor="email">Email</FieldLabel>
-          <Input
-            id="email"
-            type="email"
-            autoComplete="email"
-            placeholder="you@practice.com"
-          />
-          <FieldDescription>
-            Use the address you signed up with.
-          </FieldDescription>
-        </Field>
-
-        <Button className="w-full" disabled>
-          Send reset link
-        </Button>
-      </FieldGroup>
+      {isAuthConfigured ? <ForgotPasswordForm /> : <AuthNotConfigured />}
     </AuthCard>
   );
 }

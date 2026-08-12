@@ -12,7 +12,7 @@ export const siteConfig = {
    * Current development phase. Update this as phases are completed.
    * See CLAUDE.md for the phase-gating rule.
    */
-  phase: "Phase 1 — Architecture & Design System",
+  phase: "Phase 3 — Authentication & Access Control",
 } as const;
 
 export type SiteConfig = typeof siteConfig;

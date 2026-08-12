@@ -25,13 +25,23 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 1 — Application Architecture + Design System — COMPLETE`
+**Current phase:** `PHASE 3 — Authentication + RBAC + Multi-tenancy + RLS`
 
-Implemented so far: project foundation (Phase 0), then the application shell,
-route architecture, design system, and reusable UI components (Phase 1).
+Implemented so far: project foundation (0), application shell and design system
+(1), Supabase/Prisma database foundation (2), and authentication with
+role-based access control and Row Level Security (3).
 
-Still absent by design: database, authentication, and every product feature.
-No screen is connected to data.
+Still absent by design: organization onboarding and every product feature.
+No screen is connected to product data.
+
+**Two architectural facts that matter before touching data access:**
+
+1. Next.js 16 renamed Middleware to Proxy — the file is `src/proxy.ts`, and it
+   is *not* the authorization boundary.
+2. **Prisma bypasses Row Level Security** (it connects as the table owner). RLS
+   protects the browser→Supabase path; `src/lib/auth/dal.ts` protects the server
+   path. Never query a tenant-owned table with an `organizationId` that has not
+   come back from `requireOrganizationAccess()`. See `docs/security.md`.
 
 ---
 

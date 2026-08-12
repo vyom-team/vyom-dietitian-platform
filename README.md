@@ -15,11 +15,15 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 2 — Database Foundation (Supabase + Prisma)**
+> **Phase 3 — Authentication, RBAC, Multi-tenancy, RLS**
 
-The repository contains the application shell, design system, and the database
-foundation: schema, migrations, and a typed Prisma client. There is **no
-authentication and no product functionality**.
+The repository contains the application shell, design system, database
+foundation, and a working authentication and authorization system: sign-up,
+sign-in, email verification, password reset, role-based access control, and
+PostgreSQL Row Level Security enforcing tenant isolation.
+
+There is **no product functionality yet** — no organization onboarding, clients,
+nutrition engine, food database, plans, or billing.
 
 Every screen is layout only. Where a page shows figures, they are static
 placeholders labelled as such — and no clinical value (weight, calories, macros,
@@ -42,10 +46,12 @@ and reference data.
 | Client state | Zustand |
 | Database | PostgreSQL 17 on Supabase Cloud |
 | ORM | Prisma 7 (`@prisma/adapter-pg`) |
+| Auth | Supabase Auth via `@supabase/ssr` |
+| Tests | Vitest |
 | Linting | ESLint (`eslint-config-next`) |
 
-Planned for later phases and **not yet installed**: Supabase Auth/Storage
-clients, Razorpay, Resend.
+Planned for later phases and **not yet installed**: Supabase Storage, Razorpay,
+Resend.
 
 ---
 
@@ -85,6 +91,14 @@ The app runs at http://localhost:3000.
 | `npm run db:seed` | Development fixtures (idempotent) |
 | `npm run db:verify` | Assert constraints, keys, and indexes are enforced |
 
+### Test scripts
+
+| Command | Purpose |
+|---|---|
+| `npm test` | Full suite, including RLS tenant isolation |
+| `npm run test:watch` | Watch mode |
+| `npm run test:setup` | Prepare the disposable RLS test database |
+
 ---
 
 ## Environment
@@ -93,12 +107,16 @@ The app runs at http://localhost:3000.
 cp .env.example .env.local
 ```
 
-The UI runs with **no environment variables set**. Database features need two:
+The UI runs with **no environment variables set** — auth screens show a
+"not configured" state rather than crashing.
 
 | Variable | Required for | Notes |
 |---|---|---|
-| `DATABASE_URL` | Any database access | Supabase pooler, port 6543. Secret. |
-| `DIRECT_URL` | Migrations | Supabase direct, port 5432. Secret. Falls back to `DATABASE_URL`. |
+| `DATABASE_URL` | Any database access | Supabase pooler, port 6543. **Secret.** |
+| `DIRECT_URL` | Migrations | Supabase direct, port 5432. **Secret.** Falls back to `DATABASE_URL`. |
+| `NEXT_PUBLIC_SUPABASE_URL` | Sign-in | Public by design |
+| `NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY` | Sign-in | Public by design, RLS-constrained |
+| `RLS_TEST_DATABASE_URL` | `npm test` | Disposable database only — the tests write and delete |
 
 [.env.example](.env.example) documents these plus the variables later phases
 need, each annotated with the phase that introduces it.
@@ -133,7 +151,65 @@ Current models: `Organization`, `UserProfile`, `OrganizationMember`,
 with the phase that owns it.
 
 [docs/database.md](docs/database.md) covers conventions, indexes, the deletion
-strategy, migration workflow, and the planned RLS approach.
+strategy, and the migration workflow.
+
+---
+
+## Authentication
+
+Supabase Auth via `@supabase/ssr`. Email and password only.
+
+```bash
+# 1. Add the Supabase keys to .env.local (Project Settings → API)
+#    NEXT_PUBLIC_SUPABASE_URL
+#    NEXT_PUBLIC_SUPABASE_PUBLISHABLE_KEY
+
+# 2. In Supabase → Authentication:
+#    Providers → Email          : enabled
+#    URL Configuration → Redirect URLs
+#      http://localhost:3000/auth/callback
+
+# 3. Apply the trigger and RLS policies
+npm run db:deploy
+
+npm run dev
+```
+
+Register at `/register`, confirm by email, then sign in. A new account belongs to
+no organization yet and sees the "no practice linked" state — onboarding is the
+next phase.
+
+### Two things worth knowing
+
+**Next.js 16 renamed Middleware to Proxy.** The session hook is
+[`src/proxy.ts`](src/proxy.ts). It refreshes the session and performs optimistic
+redirects; it is *not* the authorization boundary.
+
+**Prisma bypasses Row Level Security.** It connects as the table owner, so
+policies do not constrain server queries. RLS protects the browser → Supabase
+path; the Data Access Layer ([`src/lib/auth/dal.ts`](src/lib/auth/dal.ts))
+protects the server path. Never query a tenant-owned table with an
+`organizationId` that has not come back from `requireOrganizationAccess()`.
+
+Full detail: [docs/authentication.md](docs/authentication.md),
+[docs/security.md](docs/security.md),
+[docs/multi-tenancy.md](docs/multi-tenancy.md).
+
+### Testing tenant isolation
+
+```bash
+docker run -d --name vyom-test-pg -e POSTGRES_PASSWORD=postgres \
+  -e POSTGRES_DB=vyom_test -p 55432:5432 postgres:17-alpine
+
+# .env.local
+RLS_TEST_DATABASE_URL="postgresql://postgres:postgres@localhost:55432/vyom_test"
+
+npm run test:setup
+npm test
+```
+
+The suite fails rather than skipping when that variable is unset, so a green run
+never means isolation went unchecked.
 
 ---
 
@@ -148,7 +224,13 @@ src/
     layout.tsx          Root layout, fonts, metadata
     providers.tsx       Theme, TanStack Query, Tooltip providers
     not-found.tsx
+    auth/callback/      Supabase auth callback (email + recovery links)
+    proxy.ts            Session refresh — see note above
+  lib/
+    auth/               Data Access Layer, actions, roles, route policy
+    supabase/           Browser and server Supabase clients
   components/
+    auth/               Sign-in forms and denial states
     ui/                 shadcn/ui primitives (generated; edit deliberately)
     layout/             Shell pieces — sidebar, topbar, marketing header/footer
     shared/             Reusable building blocks (see below)

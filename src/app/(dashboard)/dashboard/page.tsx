@@ -10,7 +10,9 @@ import {
   Users,
 } from "lucide-react";
 
+import { NoOrganization } from "@/components/auth/access-denied";
 import { Section } from "@/components/shared/section";
+import { requireAuth } from "@/lib/auth/dal";
 import { StatCard } from "@/components/shared/stat-card";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { StandardPage } from "@/components/templates/page-templates";
@@ -76,7 +78,25 @@ const demoActivity = [
   { id: "4", text: "Follow-up scheduled", meta: "Client D · 2 days ago" },
 ];
 
-export default function DashboardPage() {
+export default async function DashboardPage() {
+  const user = await requireAuth();
+
+  /*
+   * A freshly registered account belongs to no organization yet. That is a
+   * legitimate state rather than an error — organization onboarding is the next
+   * phase — so it gets its own explanation instead of an empty dashboard.
+   */
+  if (user.memberships.length === 0) {
+    return (
+      <StandardPage
+        title={`Welcome, ${user.fullName ?? "there"}`}
+        description="Your account is ready."
+      >
+        <NoOrganization />
+      </StandardPage>
+    );
+  }
+
   return (
     <StandardPage
       title="Good morning"

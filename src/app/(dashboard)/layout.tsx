@@ -1,13 +1,35 @@
 import { DashboardSidebar } from "@/components/layout/dashboard-sidebar";
 import { DashboardTopbar } from "@/components/layout/dashboard-topbar";
+import { requireAuth } from "@/lib/auth/dal";
 
 /**
- * Practitioner dashboard layout: fixed sidebar on desktop, sheet navigation
- * below `lg`, sticky topbar throughout.
+ * Practitioner dashboard layout.
  *
- * No authentication guard yet — that is added when auth exists.
+ * `requireAuth()` here is the real access check. `proxy.ts` also redirects
+ * unauthenticated traffic, but that is an optimistic cookie check and is not
+ * the security boundary — this call verifies the token with Supabase and
+ * resolves the profile, and it runs even if the proxy is bypassed or
+ * misconfigured.
+ *
+ * A Next.js layout does not re-run on every client-side navigation, so each
+ * page and action must still authorize its own data access. The Data Access
+ * Layer memoises per request, making that cheap.
  */
-export default function DashboardLayout({ children }: LayoutProps<"/">) {
+/**
+ * Never prerender anything behind authentication.
+ *
+ * Normally reading cookies marks a route dynamic automatically, but that signal
+ * disappears whenever the auth check short-circuits — for example when Supabase
+ * is unconfigured in a build environment. The page would then be statically
+ * generated, baking one build-time auth outcome into a response served to every
+ * visitor. Stating it explicitly means a misconfigured deploy fails closed
+ * rather than silently caching a redirect.
+ */
+export const dynamic = "force-dynamic";
+
+export default async function DashboardLayout({ children }: LayoutProps<"/">) {
+  const user = await requireAuth();
+
   return (
     <div className="min-h-svh">
       <a
@@ -20,7 +42,12 @@ export default function DashboardLayout({ children }: LayoutProps<"/">) {
       <DashboardSidebar />
 
       <div className="lg:pl-60">
-        <DashboardTopbar />
+        <DashboardTopbar
+          userName={user.fullName ?? user.email}
+          userEmail={user.email}
+          organizationName={user.memberships[0]?.organizationName}
+          role={user.memberships[0]?.role}
+        />
         <main
           id="main-content"
           tabIndex={-1}

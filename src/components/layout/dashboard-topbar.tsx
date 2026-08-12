@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { usePathname } from "next/navigation";
-import { Bell, Menu, Search } from "lucide-react";
+import { Bell, LogOut, Menu, Search } from "lucide-react";
 
 import { BrandMark } from "@/components/layout/brand-mark";
 import { DashboardNav } from "@/components/layout/dashboard-nav";
@@ -27,6 +27,9 @@ import {
 } from "@/components/ui/sheet";
 import { Separator } from "@/components/ui/separator";
 import { routeLabels } from "@/config/navigation";
+import { signOut } from "@/lib/auth/actions";
+import { ROLE_LABELS } from "@/lib/auth/roles";
+import type { OrganizationRole } from "@/generated/prisma/enums";
 
 /** Derives the page title from the first path segment. */
 function usePageTitle() {
@@ -35,12 +38,26 @@ function usePageTitle() {
   return (segment && routeLabels[segment]) ?? "Overview";
 }
 
-export function DashboardTopbar() {
+function initialsFrom(name: string): string {
+  const parts = name.trim().split(/\s+/).slice(0, 2);
+  const letters = parts.map((part) => part[0] ?? "").join("");
+  return (letters || name.slice(0, 2)).toUpperCase();
+}
+
+export function DashboardTopbar({
+  userName,
+  userEmail,
+  organizationName,
+  role,
+}: {
+  userName: string;
+  userEmail: string;
+  organizationName?: string;
+  role?: OrganizationRole;
+}) {
   const [open, setOpen] = useState(false);
   const title = usePageTitle();
 
-  // The sheet closes via each nav link's `onNavigate`, so no route-change
-  // effect is needed here.
   return (
     <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b bg-background/85 px-4 backdrop-blur-sm sm:px-6">
       <Sheet open={open} onOpenChange={setOpen}>
@@ -64,10 +81,7 @@ export function DashboardTopbar() {
             </SheetDescription>
           </SheetHeader>
           <div className="overflow-y-auto p-3">
-            <DashboardNav
-              label="Mobile"
-              onNavigate={() => setOpen(false)}
-            />
+            <DashboardNav label="Mobile" onNavigate={() => setOpen(false)} />
           </div>
         </SheetContent>
       </Sheet>
@@ -96,20 +110,41 @@ export function DashboardTopbar() {
               aria-label="Account menu"
             >
               <Avatar className="size-7">
-                <AvatarFallback className="text-xs">VY</AvatarFallback>
+                <AvatarFallback className="text-xs">
+                  {initialsFrom(userName)}
+                </AvatarFallback>
               </Avatar>
             </Button>
           </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="w-56">
+          <DropdownMenuContent align="end" className="w-60">
             <DropdownMenuLabel className="font-normal">
-              <p className="text-sm font-medium">Signed-out preview</p>
-              <p className="type-caption">Accounts arrive with authentication</p>
+              <p className="truncate text-sm font-medium">{userName}</p>
+              <p className="type-caption truncate">{userEmail}</p>
+              {organizationName ? (
+                <p className="type-caption mt-1 truncate">
+                  {organizationName}
+                  {role ? ` · ${ROLE_LABELS[role]}` : ""}
+                </p>
+              ) : null}
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuItem disabled>Profile</DropdownMenuItem>
             <DropdownMenuItem disabled>Practice settings</DropdownMenuItem>
             <DropdownMenuSeparator />
-            <DropdownMenuItem disabled>Sign out</DropdownMenuItem>
+            {/*
+              Sign-out is a form posting to a Server Action, not a client-side
+              fetch: it must clear the httpOnly session cookie, which only the
+              server can do.
+            */}
+            <form action={signOut}>
+              <button
+                type="submit"
+                className="relative flex w-full cursor-default items-center gap-2 rounded-sm px-2 py-1.5 text-sm outline-none select-none hover:bg-accent hover:text-accent-foreground focus-visible:bg-accent"
+              >
+                <LogOut className="size-4" aria-hidden="true" />
+                Sign out
+              </button>
+            </form>
           </DropdownMenuContent>
         </DropdownMenu>
       </div>

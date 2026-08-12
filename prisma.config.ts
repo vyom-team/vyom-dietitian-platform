@@ -36,9 +36,28 @@ loadEnv({ quiet: true });
  */
 export default defineConfig({
   schema: "prisma/schema.prisma",
+  experimental: {
+    // Required by `migrations.initShadowDb` and `tables.external` below.
+    externalTables: true,
+  },
+  tables: {
+    /**
+     * `auth.users` belongs to Supabase Auth. Declaring it external tells Prisma
+     * to leave it alone: our migration attaches a trigger to it but must never
+     * generate DDL that alters or drops it.
+     */
+    external: ["auth.users"],
+  },
   migrations: {
     path: "prisma/migrations",
     seed: "npx tsx prisma/seed.ts",
+    /**
+     * Recreates Supabase's `auth` schema in the shadow database so migrations
+     * that reference `auth.users` or `auth.uid()` can be validated. Without it,
+     * `prisma migrate dev` fails on the RLS migration even though the SQL is
+     * correct against the real project.
+     */
+    initShadowDb: "prisma/shadow-init.sql",
   },
   datasource: {
     url: process.env["DIRECT_URL"] ?? process.env["DATABASE_URL"],

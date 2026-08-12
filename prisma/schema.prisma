@@ -103,7 +103,7 @@ model Organization {
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   members      OrganizationMember[]
   subscription Subscription?
@@ -133,7 +133,7 @@ model UserProfile {
   avatarUrl String? @map("avatar_url") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   memberships OrganizationMember[]
 
@@ -157,7 +157,7 @@ model OrganizationMember {
   joinedAt  DateTime? @map("joined_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   user         UserProfile  @relation(fields: [userId], references: [id], onDelete: Restrict)
@@ -171,6 +171,10 @@ model OrganizationMember {
   /// "Which organizations does this person belong to" — runs on every sign-in
   /// once authentication exists.
   @@index([userId])
+  /// Supports the RLS helper functions, which resolve the caller's active
+  /// memberships on every policy evaluation. See the Phase 3 migration.
+  @@index([userId, status])
+  @@index([organizationId, status])
   @@map("organization_members")
 }
 
@@ -196,7 +200,7 @@ model Subscription {
   cancelledAt DateTime? @map("cancelled_at") @db.Timestamptz(6)
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
-  updatedAt DateTime @updatedAt @map("updated_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 

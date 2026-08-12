@@ -95,7 +95,7 @@ export async function signIn(
   });
 
   if (error) {
-    return { status: "error", message: messageForError(error) };
+    return { status: "error", message: messageForError(error, "signIn") };
   }
 
   // Validated against the allowlist so `?next=` cannot bounce a freshly
@@ -151,7 +151,7 @@ export async function signUp(
   });
 
   if (error) {
-    return { status: "error", message: messageForError(error) };
+    return { status: "error", message: messageForError(error, "signUp") };
   }
 
   /*
@@ -255,7 +255,7 @@ export async function updatePassword(
   });
 
   if (error) {
-    return { status: "error", message: messageForError(error) };
+    return { status: "error", message: messageForError(error, "updatePassword") };
   }
 
   revalidatePath("/", "layout");

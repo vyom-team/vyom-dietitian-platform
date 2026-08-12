@@ -15,11 +15,11 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 1 — Application Architecture + Design System**
+> **Phase 2 — Database Foundation (Supabase + Prisma)**
 
-The repository contains the application shell, route architecture, design
-system, and reusable UI components. There is **no database, no authentication,
-and no product functionality**.
+The repository contains the application shell, design system, and the database
+foundation: schema, migrations, and a typed Prisma client. There is **no
+authentication and no product functionality**.
 
 Every screen is layout only. Where a page shows figures, they are static
 placeholders labelled as such — and no clinical value (weight, calories, macros,
@@ -40,10 +40,12 @@ and reference data.
 | Forms | React Hook Form + Zod (`@hookform/resolvers`) |
 | Server state | TanStack Query |
 | Client state | Zustand |
+| Database | PostgreSQL 17 on Supabase Cloud |
+| ORM | Prisma 7 (`@prisma/adapter-pg`) |
 | Linting | ESLint (`eslint-config-next`) |
 
-Planned for later phases and **not yet installed**: Prisma, Supabase
-(Postgres / Auth / Storage), Razorpay, Resend.
+Planned for later phases and **not yet installed**: Supabase Auth/Storage
+clients, Razorpay, Resend.
 
 ---
 
@@ -71,6 +73,18 @@ The app runs at http://localhost:3000.
 | `npm run check:contrast` | WCAG contrast check on the design tokens |
 | `npm run check` | Typecheck + lint + contrast (run before committing) |
 
+### Database scripts
+
+| Command | Purpose |
+|---|---|
+| `npm run db:generate` | Regenerate the Prisma client |
+| `npm run db:migrate` | Create + apply a migration (development only) |
+| `npm run db:deploy` | Apply existing migrations (production/CI) |
+| `npm run db:status` | Migration state and drift |
+| `npm run db:studio` | Browse data in Prisma Studio |
+| `npm run db:seed` | Development fixtures (idempotent) |
+| `npm run db:verify` | Assert constraints, keys, and indexes are enforced |
+
 ---
 
 ## Environment
@@ -79,19 +93,47 @@ The app runs at http://localhost:3000.
 cp .env.example .env.local
 ```
 
-**No environment variables are required yet** — the app runs with none set.
-[.env.example](.env.example) documents the variables future phases will need
-(database, Supabase, email, payments), each commented out and annotated with the
-phase that introduces it.
+The UI runs with **no environment variables set**. Database features need two:
+
+| Variable | Required for | Notes |
+|---|---|---|
+| `DATABASE_URL` | Any database access | Supabase pooler, port 6543. Secret. |
+| `DIRECT_URL` | Migrations | Supabase direct, port 5432. Secret. Falls back to `DATABASE_URL`. |
+
+[.env.example](.env.example) documents these plus the variables later phases
+need, each annotated with the phase that introduces it.
 
 Rules:
 
-- `.env.local` is git-ignored and must never be committed.
+- `.env` and `.env.local` are git-ignored and must never be committed.
 - `NEXT_PUBLIC_*` values are inlined into the browser bundle and are **public**.
   Never give a secret that prefix.
-- All environment access goes through [`src/config/env.ts`](src/config/env.ts),
-  which validates variables with Zod at startup rather than scattering
-  `process.env` reads across the codebase.
+- Environment access is split so secrets cannot leak into the client bundle:
+  [`env.ts`](src/config/env.ts) holds browser-safe values, while
+  [`env.server.ts`](src/config/env.server.ts) is guarded by `server-only` and
+  holds the database URLs. Importing the latter from a client component is a
+  build error.
+
+## Database
+
+PostgreSQL 17 on Supabase, accessed through Prisma 7. **Organization is the
+tenant** — every future practice-owned table carries an `organization_id`.
+
+```bash
+cp .env.example .env.local    # fill in DATABASE_URL and DIRECT_URL
+npm install                   # postinstall generates the Prisma client
+npm run db:migrate            # apply migrations
+npm run db:verify             # assert the foundation works
+```
+
+Visit `/system` for a connection status page.
+
+Current models: `Organization`, `UserProfile`, `OrganizationMember`,
+`Subscription`. No client, plan, food, or nutrition tables yet — each arrives
+with the phase that owns it.
+
+[docs/database.md](docs/database.md) covers conventions, indexes, the deletion
+strategy, migration workflow, and the planned RLS approach.
 
 ---
 

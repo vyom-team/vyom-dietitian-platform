@@ -11,23 +11,35 @@
     "typegen": "next typegen",
     "typecheck": "next typegen && tsc --noEmit",
     "check:contrast": "node scripts/check-contrast.mjs",
-    "check": "npm run typecheck && npm run lint && npm run check:contrast"
+    "check": "npm run typecheck && npm run lint && npm run check:contrast",
+    "db:generate": "prisma generate",
+    "db:migrate": "prisma migrate dev",
+    "db:deploy": "prisma migrate deploy",
+    "db:status": "prisma migrate status",
+    "db:studio": "prisma studio",
+    "db:seed": "tsx prisma/seed.ts",
+    "db:verify": "tsx scripts/verify-database.ts",
+    "postinstall": "prisma generate"
   },
   "engines": {
     "node": ">=20.9.0"
   },
   "dependencies": {
     "@hookform/resolvers": "^5.7.1",
+    "@prisma/adapter-pg": "^7.9.1",
+    "@prisma/client": "^7.9.1",
     "@tanstack/react-query": "^5.101.4",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^1.31.0",
     "next": "16.3.0",
     "next-themes": "^0.4.6",
+    "pg": "^8.23.0",
     "radix-ui": "^1.6.7",
     "react": "19.2.8",
     "react-dom": "19.2.8",
     "react-hook-form": "^7.85.0",
+    "server-only": "^0.0.1",
     "shadcn": "^4.17.0",
     "sonner": "^2.0.8",
     "tailwind-merge": "^3.6.0",
@@ -38,11 +50,15 @@
   "devDependencies": {
     "@tailwindcss/postcss": "^4",
     "@types/node": "^20",
+    "@types/pg": "^8.21.0",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "dotenv": "^17.4.2",
     "eslint": "^9",
     "eslint-config-next": "16.3.0",
+    "prisma": "^7.9.1",
     "tailwindcss": "^4",
+    "tsx": "^4.23.12",
     "typescript": "^5"
   }
 }

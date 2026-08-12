@@ -48,3 +48,16 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# prisma client — generated from schema.prisma by `npm run db:generate`
+# (also runs on postinstall, so a fresh clone gets it automatically)
+/src/generated/prisma
+
+# Agent skill docs vendored by `prisma init`. Not committed: .agents/skills is
+# ~465KB of third-party documentation, and the .claude/.windsurf copies are
+# absolute-path symlinks into it that would break on any other machine.
+# Recreate locally with `npx prisma init` if you want them.
+/.agents/
+/.claude/
+/.windsurf/
+/skills-lock.json

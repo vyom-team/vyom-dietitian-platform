@@ -25,9 +25,13 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 0 — Project Foundation — NOT STARTED`
+**Current phase:** `PHASE 1 — Application Architecture + Design System — COMPLETE`
 
-Nothing has been implemented. The repository contains documentation only.
+Implemented so far: project foundation (Phase 0), then the application shell,
+route architecture, design system, and reusable UI components (Phase 1).
+
+Still absent by design: database, authentication, and every product feature.
+No screen is connected to data.
 
 ---
 

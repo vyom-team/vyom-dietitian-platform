@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next";
 import { Geist } from "next/font/google";
 
 import { Providers } from "@/app/providers";
+import { Toaster } from "@/components/ui/sonner";
 import { siteConfig } from "@/config/site";
 import { cn } from "@/lib/utils";
 
@@ -25,9 +26,12 @@ export const metadata: Metadata = {
 };
 
 export const viewport: Viewport = {
+  // Browser chrome only accepts literal colours, so these are the sRGB
+  // equivalents of the `--background` token in each theme. Keep them in sync
+  // if that token changes.
   themeColor: [
     { media: "(prefers-color-scheme: light)", color: "#ffffff" },
-    { media: "(prefers-color-scheme: dark)", color: "#0b1211" },
+    { media: "(prefers-color-scheme: dark)", color: "#070e0f" },
   ],
 };
 
@@ -40,7 +44,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
           geist.variable,
         )}
       >
-        <Providers>{children}</Providers>
+        <Providers>
+          {children}
+          <Toaster />
+        </Providers>
       </body>
     </html>
   );

@@ -38,6 +38,20 @@
     --color-card: var(--card);
     --color-foreground: var(--foreground);
     --color-background: var(--background);
+
+    /* Semantic status. Always pair with an icon or text — never colour alone. */
+    --color-success: var(--success);
+    --color-success-foreground: var(--success-foreground);
+    --color-success-subtle: var(--success-subtle);
+    --color-warning: var(--warning);
+    --color-warning-foreground: var(--warning-foreground);
+    --color-warning-subtle: var(--warning-subtle);
+    --color-info: var(--info);
+    --color-info-foreground: var(--info-foreground);
+    --color-info-subtle: var(--info-subtle);
+    --color-destructive-foreground: var(--destructive-foreground);
+    --color-destructive-subtle: var(--destructive-subtle);
+
     --radius-sm: calc(var(--radius) * 0.6);
     --radius-md: calc(var(--radius) * 0.8);
     --radius-lg: var(--radius);
@@ -76,7 +90,23 @@
     --muted-foreground: oklch(0.512 0.014 200);
     --accent: oklch(0.955 0.012 190);
     --accent-foreground: oklch(0.28 0.032 190);
-    --destructive: oklch(0.577 0.245 27.325);
+    /*
+     * Status colours are darker than a typical palette because each doubles as
+     * small text on its own `-subtle` background (status pills). Both roles are
+     * verified against WCAG AA — see the contrast note above before retuning.
+     */
+    --destructive: oklch(0.53 0.225 27.325);
+    --destructive-foreground: oklch(0.985 0.004 27);
+    --destructive-subtle: oklch(0.962 0.018 27);
+    --success: oklch(0.52 0.105 150);
+    --success-foreground: oklch(0.985 0.004 150);
+    --success-subtle: oklch(0.962 0.024 150);
+    --warning: oklch(0.52 0.118 68);
+    --warning-foreground: oklch(0.99 0.004 72);
+    --warning-subtle: oklch(0.968 0.036 82);
+    --info: oklch(0.53 0.105 245);
+    --info-foreground: oklch(0.985 0.004 245);
+    --info-subtle: oklch(0.962 0.022 245);
     --border: oklch(0.917 0.006 200);
     --input: oklch(0.917 0.006 200);
     --ring: oklch(0.48 0.078 187);
@@ -112,6 +142,17 @@
     --accent: oklch(0.292 0.024 190);
     --accent-foreground: oklch(0.955 0.008 190);
     --destructive: oklch(0.704 0.191 22.216);
+    --destructive-foreground: oklch(0.175 0.03 27);
+    --destructive-subtle: oklch(0.278 0.048 27);
+    --success: oklch(0.706 0.128 150);
+    --success-foreground: oklch(0.175 0.03 150);
+    --success-subtle: oklch(0.272 0.046 150);
+    --warning: oklch(0.782 0.132 76);
+    --warning-foreground: oklch(0.185 0.032 76);
+    --warning-subtle: oklch(0.288 0.05 76);
+    --info: oklch(0.712 0.115 245);
+    --info-foreground: oklch(0.175 0.03 245);
+    --info-subtle: oklch(0.278 0.046 245);
     --border: oklch(1 0 0 / 10%);
     --input: oklch(1 0 0 / 15%);
     --ring: oklch(0.745 0.088 187);
@@ -150,5 +191,60 @@
 @media (prefers-reduced-motion: reduce) {
   html {
     scroll-behavior: auto;
+  }
+}
+
+/*
+ * Typography scale — the single source of truth for text sizing.
+ *
+ * Use these classes instead of picking `text-*` sizes ad hoc. Adding a new
+ * step should be a deliberate design decision, not a one-off in a component.
+ *
+ * Headings stay confident rather than oversized: this is a working tool for
+ * practitioners, not a landing page.
+ */
+@layer components {
+  .type-display {
+    @apply font-heading text-3xl leading-tight font-semibold tracking-tight text-balance sm:text-4xl lg:text-5xl;
+  }
+  .type-h1 {
+    @apply font-heading text-2xl leading-tight font-semibold tracking-tight text-balance sm:text-3xl;
+  }
+  .type-h2 {
+    @apply font-heading text-xl leading-snug font-semibold tracking-tight sm:text-2xl;
+  }
+  .type-h3 {
+    @apply font-heading text-base leading-snug font-semibold tracking-tight sm:text-lg;
+  }
+  .type-h4 {
+    @apply font-heading text-sm leading-snug font-semibold sm:text-base;
+  }
+
+  .type-body-lg {
+    @apply text-base leading-7;
+  }
+  .type-body {
+    @apply text-sm leading-6;
+  }
+  .type-body-sm {
+    @apply text-[0.8125rem] leading-5;
+  }
+
+  .type-label {
+    @apply text-sm leading-none font-medium;
+  }
+  .type-caption {
+    @apply text-xs leading-4 text-muted-foreground;
+  }
+  .type-button {
+    @apply text-sm font-medium;
+  }
+
+  /* Metrics and any aligned numeric column. */
+  .type-metric {
+    @apply font-heading text-2xl leading-none font-semibold tracking-tight tabular-nums sm:text-3xl;
+  }
+  .type-numeric {
+    @apply tabular-nums;
   }
 }

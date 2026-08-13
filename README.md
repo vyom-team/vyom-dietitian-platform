@@ -15,15 +15,20 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 3 — Authentication, RBAC, Multi-tenancy, RLS**
+> **Phase 4 — Organization / Practice Onboarding**
 
 The repository contains the application shell, design system, database
-foundation, and a working authentication and authorization system: sign-up,
-sign-in, email verification, password reset, role-based access control, and
-PostgreSQL Row Level Security enforcing tenant isolation.
+foundation, authentication with role-based access control and Row Level
+Security, and practice onboarding: a newly registered user creates their
+practice and becomes its owner.
 
-There is **no product functionality yet** — no organization onboarding, clients,
-nutrition engine, food database, plans, or billing.
+There is **no product functionality yet** — no clients, nutrition engine, food
+database, plans, or billing.
+
+> **Terminology.** The database says `Organization`; the interface says
+> **practice**. One entity, two names — see
+> [docs/organization-onboarding.md](docs/organization-onboarding.md). Do not
+> rename the models.
 
 Every screen is layout only. Where a page shows figures, they are static
 placeholders labelled as such — and no clinical value (weight, calories, macros,
@@ -175,8 +180,9 @@ npm run db:deploy
 npm run dev
 ```
 
-Register at `/register`. A new account belongs to no organization yet and sees
-the "no practice linked" state — onboarding is the next phase.
+Register at `/register`. A new account has no practice yet, so it lands on
+`/onboarding`: practice details, your professional profile, review, then create.
+The server makes you the **owner** — the role is never something you pick.
 
 > **For development, turn off email confirmation.** Supabase's built-in sender
 > allows only **2 emails per hour** and delivers **only to your project's team

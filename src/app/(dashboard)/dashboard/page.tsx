@@ -1,203 +1,81 @@
 import type { Metadata } from "next";
-import Link from "next/link";
-import {
-  ArrowUpRight,
-  CalendarRange,
-  CheckCircle2,
-  ClipboardList,
-  FileText,
-  UserPlus,
-  Users,
-} from "lucide-react";
+import { Building2, ShieldCheck, UserRound } from "lucide-react";
 
-import { NoOrganization } from "@/components/auth/access-denied";
 import { Section } from "@/components/shared/section";
-import { requireAuth } from "@/lib/auth/dal";
-import { StatCard } from "@/components/shared/stat-card";
-import { StatusBadge } from "@/components/shared/status-badge";
 import { StandardPage } from "@/components/templates/page-templates";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
-import { Button } from "@/components/ui/button";
-import { EmptyState } from "@/components/shared/empty-state";
+import { requireMembership } from "@/lib/auth/dal";
+import { ROLE_LABELS } from "@/lib/auth/roles";
 
 export const metadata: Metadata = { title: "Overview" };
 
 /**
- * DESIGN PREVIEW — NOT PRODUCTION DATA.
+ * Practice dashboard.
  *
- * Every value below is a hard-coded layout placeholder used to show the visual
- * language at realistic density. There is no data source behind this page.
+ * A Phase 4 placeholder: it exists to confirm the practice was created and that
+ * the signed-in user is its owner. Client lists, plans, and analytics belong to
+ * later phases and are deliberately absent — a dashboard full of invented
+ * numbers would be worse than an honest empty one.
  *
- * Deliberately excluded: any weight, calorie, macro, micronutrient, or other
- * clinical figure. Inventing those would contradict the project's core rule
- * that nutrition values must trace to a reference source, and a fabricated
- * number here could be mistaken for a real one later.
+ * `requireMembership()` sends a user without a practice to onboarding, which is
+ * the mirror of the guard on the onboarding page.
  */
-const demoCounts = [
-  {
-    label: "Active clients",
-    value: "24",
-    icon: Users,
-    emphasis: "primary" as const,
-    trend: {
-      direction: "up" as const,
-      label: "+3",
-      sentiment: "positive" as const,
-    },
-    hint: "vs last month",
-  },
-  {
-    label: "Plans in draft",
-    value: "5",
-    icon: ClipboardList,
-    hint: "Awaiting your review",
-  },
-  {
-    label: "Follow-ups due",
-    value: "7",
-    icon: CalendarRange,
-    hint: "Next 7 days",
-  },
-  {
-    label: "Plans delivered",
-    value: "18",
-    icon: FileText,
-    trend: {
-      direction: "flat" as const,
-      label: "No change",
-      sentiment: "neutral" as const,
-    },
-    hint: "This month",
-  },
-];
-
-const demoActivity = [
-  { id: "1", text: "Plan reviewed and approved", meta: "Client A · 2 hours ago" },
-  { id: "2", text: "New client added", meta: "Client B · Yesterday" },
-  { id: "3", text: "Weekly plan exported to PDF", meta: "Client C · Yesterday" },
-  { id: "4", text: "Follow-up scheduled", meta: "Client D · 2 days ago" },
-];
-
 export default async function DashboardPage() {
-  const user = await requireAuth();
+  const { user, membership } = await requireMembership();
 
-  /*
-   * A freshly registered account belongs to no organization yet. That is a
-   * legitimate state rather than an error — organization onboarding is the next
-   * phase — so it gets its own explanation instead of an empty dashboard.
-   */
-  if (user.memberships.length === 0) {
-    return (
-      <StandardPage
-        title={`Welcome, ${user.fullName ?? "there"}`}
-        description="Your account is ready."
-      >
-        <NoOrganization />
-      </StandardPage>
-    );
-  }
+  const firstName = user.fullName?.split(" ")[0] ?? "there";
+
+  const facts = [
+    {
+      icon: Building2,
+      label: "Practice",
+      value: membership.organizationName,
+    },
+    {
+      icon: UserRound,
+      label: "Owner",
+      value: user.fullName ?? user.email,
+    },
+    {
+      icon: ShieldCheck,
+      label: "Your role",
+      value: ROLE_LABELS[membership.role],
+    },
+  ];
 
   return (
     <StandardPage
-      title="Good morning"
-      description="Here is where your practice stands today."
-      action={
-        <Button>
-          <UserPlus className="size-4" aria-hidden="true" />
-          Add client
-        </Button>
-      }
+      title={`Welcome, ${firstName}`}
+      description="Your practice is set up and ready."
     >
+      <Section>
+        <dl className="grid gap-4 sm:grid-cols-3">
+          {facts.map((fact) => (
+            <div key={fact.label} className="rounded-xl border bg-card p-5">
+              <div className="flex items-center gap-2">
+                <fact.icon
+                  className="size-4 shrink-0 text-muted-foreground"
+                  aria-hidden="true"
+                />
+                <dt className="type-caption font-medium tracking-wide uppercase">
+                  {fact.label}
+                </dt>
+              </div>
+              <dd className="type-h3 mt-3 break-words">{fact.value}</dd>
+            </div>
+          ))}
+        </dl>
+      </Section>
+
       <Alert>
-        <CheckCircle2 />
-        <AlertTitle>Design preview</AlertTitle>
+        <ShieldCheck />
+        <AlertTitle>What&apos;s next</AlertTitle>
         <AlertDescription>
-          This page demonstrates the interface only. The figures below are static
-          placeholders, not practice data, and no clinical values appear
-          anywhere. Real data arrives once the database and client management are
-          built.
+          Client management, nutrition targets, and meal plans are built in the
+          phases that follow. This screen confirms your practice exists and that
+          you own it — nothing here is placeholder data.
         </AlertDescription>
       </Alert>
-
-      <Section
-        title="This month"
-        description="A summary of practice activity."
-      >
-        <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
-          {demoCounts.map((stat) => (
-            <StatCard key={stat.label} {...stat} />
-          ))}
-        </div>
-      </Section>
-
-      <div className="grid gap-6 lg:grid-cols-3">
-        <Section
-          title="Needs attention"
-          description="Deterministic flags surface here."
-          className="lg:col-span-2"
-        >
-          <div className="divide-y overflow-hidden rounded-xl border bg-card">
-            <div className="flex flex-wrap items-center gap-3 p-4">
-              <StatusBadge tone="warning">Adherence</StatusBadge>
-              <p className="type-body min-w-0 flex-1">
-                Two clients logged fewer meals than usual last week.
-              </p>
-              <Button variant="ghost" size="sm" disabled>
-                Review
-                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="flex flex-wrap items-center gap-3 p-4">
-              <StatusBadge tone="info">Follow-up</StatusBadge>
-              <p className="type-body min-w-0 flex-1">
-                Three follow-up reviews fall due this week.
-              </p>
-              <Button variant="ghost" size="sm" disabled>
-                Review
-                <ArrowUpRight className="size-3.5" aria-hidden="true" />
-              </Button>
-            </div>
-            <div className="p-4">
-              <p className="type-caption">
-                Flags are generated by fixed rules, never by a model, and never
-                change a client&apos;s plan on their own.
-              </p>
-            </div>
-          </div>
-        </Section>
-
-        <Section title="Recent activity">
-          <div className="divide-y overflow-hidden rounded-xl border bg-card">
-            {demoActivity.map((item) => (
-              <div key={item.id} className="p-4">
-                <p className="type-body">{item.text}</p>
-                <p className="type-caption mt-0.5">{item.meta}</p>
-              </div>
-            ))}
-          </div>
-        </Section>
-      </div>
-
-      <Section
-        title="Your clients"
-        action={
-          <Button variant="outline" size="sm" asChild>
-            <Link href="/clients">View all</Link>
-          </Button>
-        }
-      >
-        <EmptyState
-          icon={Users}
-          title="No clients yet"
-          description="Add your first client to start building personalised nutrition plans and tracking their progress."
-          action={
-            <Button>
-              <UserPlus className="size-4" aria-hidden="true" />
-              Add client
-            </Button>
-          }
-        />
-      </Section>
     </StandardPage>
   );
 }

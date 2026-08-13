@@ -25,14 +25,17 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 3 — Authentication + RBAC + Multi-tenancy + RLS`
+**Current phase:** `PHASE 4 — Organization / Practice Onboarding`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), and authentication with
 role-based access control and Row Level Security (3).
 
-Still absent by design: organization onboarding and every product feature.
-No screen is connected to product data.
+Still absent by design: every product feature (clients, nutrition, foods,
+plans, billing). No screen is connected to product data.
+
+**Terminology:** the database says `Organization`; the UI says **practice**.
+One entity, two names — see `docs/organization-onboarding.md`. Do not rename.
 
 **Two architectural facts that matter before touching data access:**
 

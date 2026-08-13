@@ -7,7 +7,9 @@ import {
   createFixture,
   destroyFixture,
   hasRlsDatabase,
+  isRlsDatabaseReachable,
   queryAs,
+  UNREACHABLE_MESSAGE,
   type Fixture,
 } from "./helpers/rls-db";
 
@@ -23,7 +25,10 @@ import {
  */
 
 const run = `rls${Date.now().toString(36)}`;
-const enabled = hasRlsDatabase();
+// Resolved before the suites are registered so an unreachable database skips
+// cleanly instead of failing every test with a socket error.
+const reachable = await isRlsDatabaseReachable();
+const enabled = hasRlsDatabase() && reachable;
 
 describe.skipIf(!enabled)("Row Level Security", () => {
   let owner: Client;
@@ -407,11 +412,12 @@ describe.skipIf(!enabled)("Row Level Security", () => {
 
 // Fails loudly rather than reporting a green suite that tested nothing.
 describe("RLS test configuration", () => {
-  it("has a database configured", () => {
-    expect(
-      enabled,
-      "RLS_TEST_DATABASE_URL is not set — tenant isolation was NOT verified. " +
-        "See docs/security.md for how to start a disposable test database.",
-    ).toBe(true);
+  it("has a reachable database", () => {
+    const reason = !hasRlsDatabase()
+      ? "RLS_TEST_DATABASE_URL is not set — tenant isolation was NOT verified. " +
+        "See docs/security.md for how to start a disposable test database."
+      : UNREACHABLE_MESSAGE;
+
+    expect(enabled, reason).toBe(true);
   });
 });

@@ -11,6 +11,15 @@ export const DEFAULT_SIGNED_IN_PATH = "/dashboard";
 export const SIGN_IN_PATH = "/login";
 
 /**
+ * Where a signed-in user without a practice is sent.
+ *
+ * Protected like any application route: onboarding requires a session. It is
+ * deliberately *not* in `AUTH_PREFIXES`, because a signed-in user without a
+ * practice belongs here rather than being bounced to the dashboard.
+ */
+export const ONBOARDING_PATH = "/onboarding";
+
+/**
  * Prefixes requiring an authenticated session.
  *
  * Anything not listed is public. That is deliberate: the marketing site must

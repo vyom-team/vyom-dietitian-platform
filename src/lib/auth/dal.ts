@@ -8,7 +8,11 @@ import type { MembershipStatus, OrganizationRole } from "@/generated/prisma/enum
 import { isAuthConfigured } from "@/config/env";
 import { createClient } from "@/lib/supabase/server";
 import { prisma } from "@/lib/prisma";
-import { SIGN_IN_PATH } from "@/lib/auth/routes";
+import {
+  DEFAULT_SIGNED_IN_PATH,
+  ONBOARDING_PATH,
+  SIGN_IN_PATH,
+} from "@/lib/auth/routes";
 import { ForbiddenError, NoOrganizationError } from "@/lib/auth/errors";
 
 /**
@@ -199,6 +203,44 @@ export async function requireRole(
   if (!allowed.includes(membership.role)) throw new ForbiddenError();
 
   return membership;
+}
+
+/**
+ * Gate for the onboarding routes: requires a signed-in user with **no**
+ * practice yet.
+ *
+ * Someone who already belongs to a practice is sent to the application instead,
+ * which is what stops a completed user from re-entering onboarding and creating
+ * a second practice by accident.
+ *
+ * Membership is read from the database on every call — never from a cookie, a
+ * client flag, or `localStorage`. The presence of a membership row *is* the
+ * definition of "onboarded", so there is no second source of truth to drift.
+ */
+export async function requireOnboardingAccess(): Promise<AuthenticatedUser> {
+  const user = await requireAuth();
+  if (user.memberships.length > 0) redirect(DEFAULT_SIGNED_IN_PATH);
+  return user;
+}
+
+/**
+ * Gate for the application routes: requires a signed-in user who has a practice.
+ *
+ * The mirror image of `requireOnboardingAccess`. Together the two are total and
+ * disjoint — a signed-in user satisfies exactly one — which is what makes a
+ * redirect loop impossible: each guard sends the user to a route governed by
+ * the other, and that route accepts them.
+ */
+export async function requireMembership(): Promise<{
+  user: AuthenticatedUser;
+  membership: MembershipSummary;
+}> {
+  const user = await requireAuth();
+  const membership = user.memberships[0];
+
+  if (!membership) redirect(ONBOARDING_PATH);
+
+  return { user, membership };
 }
 
 /**

@@ -94,9 +94,34 @@ model Organization {
   id      String             @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   name    String             @db.VarChar(120)
   /// URL-safe identifier, e.g. "healthy-life-nutrition". Unique platform-wide.
+  /// Always derived server-side from the name; never accepted from a client.
   slug    String             @unique @db.VarChar(80)
   logoUrl String?            @map("logo_url") @db.Text
   status  OrganizationStatus @default(ACTIVE)
+
+  // --- Practice details, captured during onboarding -------------------------
+  // "Practice" is the user-facing word for an Organization. The database keeps
+  // the tenant-neutral name; only the UI says practice.
+
+  /// ISO 3166-1 alpha-2, e.g. "IN". A code rather than a display name so it
+  /// stays stable across locales and translations.
+  country String @default("IN") @db.VarChar(2)
+
+  /// IANA timezone identifier, e.g. "Asia/Kolkata". Never an abbreviation like
+  /// "IST": those are ambiguous and do not carry daylight-saving rules, which
+  /// scheduling and reminders will depend on.
+  timezone String @default("Asia/Kolkata") @db.VarChar(64)
+
+  /// Practice contact address — distinct from the owner's login email.
+  email   String? @db.VarChar(255)
+  phone   String? @db.VarChar(32)
+  /// http/https only; enforced by validation before it reaches the database.
+  website String? @db.Text
+
+  addressLine String? @map("address_line") @db.VarChar(200)
+  city        String? @db.VarChar(100)
+  state       String? @db.VarChar(100)
+  postalCode  String? @map("postal_code") @db.VarChar(20)
 
   /// Set when the organization is archived. Presence of this value — not row
   /// deletion — is what takes a tenant out of service.
@@ -129,8 +154,14 @@ model UserProfile {
   fullName  String? @map("full_name") @db.VarChar(120)
   /// Stored lowercase. Unique platform-wide so one person maps to one profile.
   email     String  @unique @db.VarChar(255)
-  phone     String? @db.VarChar(20)
+  phone     String? @db.VarChar(32)
   avatarUrl String? @map("avatar_url") @db.Text
+
+  /// Professional credential shown on plans and documents, e.g. "Registered
+  /// Dietitian". Free text: credentials vary by country and registering body,
+  /// and an enum would exclude legitimate ones.
+  professionalTitle String? @map("professional_title") @db.VarChar(120)
+  bio               String? @db.Text
 
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)

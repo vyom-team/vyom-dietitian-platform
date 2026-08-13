@@ -21,6 +21,40 @@ export function hasRlsDatabase(): boolean {
   return Boolean(rlsDatabaseUrl);
 }
 
+/**
+ * Whether the configured test database is actually reachable.
+ *
+ * "Configured" and "running" are different failures with different fixes, and a
+ * raw `ECONNREFUSED` across a dozen tests says neither. This lets the suites
+ * report the useful one: the variable is set, the container is not up.
+ */
+export async function isRlsDatabaseReachable(): Promise<boolean> {
+  if (!rlsDatabaseUrl) return false;
+
+  const client = new Client({
+    connectionString: rlsDatabaseUrl,
+    connectionTimeoutMillis: 3000,
+  });
+
+  try {
+    await client.connect();
+    await client.query("SELECT 1");
+    return true;
+  } catch {
+    return false;
+  } finally {
+    await client.end().catch(() => {});
+  }
+}
+
+/** Message shown when the database is configured but unreachable. */
+export const UNREACHABLE_MESSAGE =
+  "RLS_TEST_DATABASE_URL is set but the database is not reachable. " +
+  "Start it with:\n" +
+  "  docker run -d --name vyom-test-pg -e POSTGRES_PASSWORD=postgres \\\n" +
+  "    -e POSTGRES_DB=vyom_test -p 55432:5432 postgres:17-alpine\n" +
+  "  npm run test:setup";
+
 /** Connects as the table owner, which bypasses RLS. Used for fixture setup. */
 export async function connectAsOwner(): Promise<Client> {
   if (!rlsDatabaseUrl) throw new Error("RLS_TEST_DATABASE_URL is not set");

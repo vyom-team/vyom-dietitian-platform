@@ -119,6 +119,15 @@ export async function signUp(
     confirmPassword: formData.get("confirmPassword"),
   });
 
+  // Where to land afterwards. Carries an invitation link through registration
+  // so an invited user returns to the invite instead of being sent to onboarding
+  // and creating their own practice by mistake. Validated as an internal path.
+  const redirectTo = safeRedirectPath(
+    typeof formData.get("redirectTo") === "string"
+      ? String(formData.get("redirectTo"))
+      : undefined,
+  );
+
   if (!parsed.success) {
     return {
       status: "error",
@@ -146,7 +155,7 @@ export async function signUp(
       // Read by the database trigger to populate user_profiles.full_name. The
       // profile row itself is created by that trigger, never by the browser.
       data: { full_name: parsed.data.fullName },
-      emailRedirectTo: `${origin}/auth/callback`,
+      emailRedirectTo: `${origin}/auth/callback?next=${encodeURIComponent(redirectTo)}`,
     },
   });
 
@@ -169,7 +178,7 @@ export async function signUp(
    */
   if (data.session) {
     revalidatePath("/", "layout");
-    redirect(DEFAULT_SIGNED_IN_PATH);
+    redirect(redirectTo);
   }
 
   /*

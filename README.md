@@ -15,12 +15,13 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 4 — Organization / Practice Onboarding**
+> **Phase 5 — Team & Staff Management**
 
 The repository contains the application shell, design system, database
 foundation, authentication with role-based access control and Row Level
-Security, and practice onboarding: a newly registered user creates their
-practice and becomes its owner.
+Security, practice onboarding, and team management — a practice owner invites
+dietitians and receptionists, who accept an invitation and join with an
+assigned role.
 
 There is **no product functionality yet** — no clients, nutrition engine, food
 database, plans, or billing.
@@ -152,8 +153,8 @@ npm run db:verify             # assert the foundation works
 Visit `/system` for a connection status page.
 
 Current models: `Organization`, `UserProfile`, `OrganizationMember`,
-`Subscription`. No client, plan, food, or nutrition tables yet — each arrives
-with the phase that owns it.
+`OrganizationInvitation`, `Subscription`. No client, plan, food, or nutrition
+tables yet — each arrives with the phase that owns it.
 
 [docs/database.md](docs/database.md) covers conventions, indexes, the deletion
 strategy, and the migration workflow.
@@ -205,7 +206,21 @@ protects the server path. Never query a tenant-owned table with an
 
 Full detail: [docs/authentication.md](docs/authentication.md),
 [docs/security.md](docs/security.md),
-[docs/multi-tenancy.md](docs/multi-tenancy.md).
+[docs/multi-tenancy.md](docs/multi-tenancy.md),
+[docs/organization-onboarding.md](docs/organization-onboarding.md),
+[docs/team-management.md](docs/team-management.md).
+
+## Team
+
+An owner invites staff from `/team`. Invitations carry a cryptographically
+random token whose **SHA-256 hash** is what the database stores, expire after
+7 days, and are single-use. Only `DIETITIAN` and `RECEPTIONIST` can be invited —
+`OWNER` and `SUPER_ADMIN` fail validation, so no request shape can ask for them.
+
+> **Email delivery is not configured yet.** The invitation is created and the
+> owner is shown the link to share directly, rather than being told an email was
+> sent that never left the building. Wiring a provider means adding one
+> transport in [`src/services/email.ts`](src/services/email.ts).
 
 ### Testing tenant isolation
 

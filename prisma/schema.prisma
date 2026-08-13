@@ -72,6 +72,20 @@ enum SubscriptionPlan {
   @@map("subscription_plan")
 }
 
+/// Lifecycle of a team invitation.
+///
+/// EXPIRED is derived from `expiresAt` at read time rather than written by a
+/// background job — a row can be past its expiry while still marked PENDING, so
+/// every check must compare the timestamp, not trust the status alone.
+enum InvitationStatus {
+  PENDING
+  ACCEPTED
+  REVOKED
+  EXPIRED
+
+  @@map("invitation_status")
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -132,6 +146,7 @@ model Organization {
 
   members      OrganizationMember[]
   subscription Subscription?
+  invitations  OrganizationInvitation[]
 
   /// Dashboards list active organizations by recency; slug already has a unique
   /// index and needs no second one.
@@ -166,7 +181,9 @@ model UserProfile {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  memberships OrganizationMember[]
+  memberships         OrganizationMember[]
+  invitationsSent     OrganizationInvitation[] @relation("InvitationsSent")
+  invitationsAccepted OrganizationInvitation[] @relation("InvitationsAccepted")
 
   @@map("user_profiles")
 }
@@ -207,6 +224,58 @@ model OrganizationMember {
   @@index([userId, status])
   @@index([organizationId, status])
   @@map("organization_members")
+}
+
+/// An invitation for someone to join a practice as staff.
+///
+/// TOKEN HANDLING — the security-critical part of this model:
+///
+/// `tokenHash` stores a SHA-256 digest, never the token itself. The raw token
+/// exists only in the invitation link. A leaked database backup therefore
+/// yields no usable invitations, and lookup is by hash so the plaintext is
+/// never compared, logged, or stored.
+model OrganizationInvitation {
+  id             String           @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String           @map("organization_id") @db.Uuid
+  /// Normalised to lowercase so one address cannot hold two invitations.
+  email          String           @db.VarChar(255)
+  /// Restricted to staff roles by application validation. OWNER, SUPER_ADMIN,
+  /// and CLIENT are never assignable through an invitation.
+  role           OrganizationRole
+  /// SHA-256 of the raw token, hex encoded. Unique so a token identifies at
+  /// most one invitation.
+  tokenHash      String           @unique @map("token_hash") @db.VarChar(64)
+  status         InvitationStatus @default(PENDING)
+
+  expiresAt DateTime @map("expires_at") @db.Timestamptz(6)
+
+  /// Who sent it. Restrict rather than cascade: an invitation is a record of
+  /// something a person did, and it should survive their profile changing.
+  invitedById String @map("invited_by_id") @db.Uuid
+
+  acceptedAt   DateTime? @map("accepted_at") @db.Timestamptz(6)
+  acceptedById String?   @map("accepted_by_id") @db.Uuid
+  revokedAt    DateTime? @map("revoked_at") @db.Timestamptz(6)
+
+  /// Optional note from the sender, shown in the email and on the accept page.
+  message String? @db.VarChar(500)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  invitedBy    UserProfile  @relation("InvitationsSent", fields: [invitedById], references: [id], onDelete: Restrict)
+  acceptedBy   UserProfile? @relation("InvitationsAccepted", fields: [acceptedById], references: [id], onDelete: SetNull)
+
+  /// One invitation row per address per practice. Re-inviting updates this row
+  /// with a fresh token and expiry rather than accumulating duplicates, which
+  /// is what stops an unbounded pile of pending invitations for one address.
+  @@unique([organizationId, email])
+  /// Drives the pending-invitations list on the team page.
+  @@index([organizationId, status])
+  /// Finds a person's invitations after they sign up under that address.
+  @@index([email, status])
+  @@map("organization_invitations")
 }
 
 /// Commercial subscription for an organization.

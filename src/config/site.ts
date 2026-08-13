@@ -12,7 +12,7 @@ export const siteConfig = {
    * Current development phase. Update this as phases are completed.
    * See CLAUDE.md for the phase-gating rule.
    */
-  phase: "Phase 4 — Practice Onboarding",
+  phase: "Phase 5 — Team Management",
 } as const;
 
 export type SiteConfig = typeof siteConfig;

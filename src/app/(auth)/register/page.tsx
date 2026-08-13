@@ -7,7 +7,12 @@ import { isAuthConfigured } from "@/config/env";
 
 export const metadata: Metadata = { title: "Create your account" };
 
-export default function RegisterPage() {
+export default async function RegisterPage({
+  searchParams,
+}: PageProps<"/register">) {
+  const params = await searchParams;
+  const next = typeof params.next === "string" ? params.next : undefined;
+
   return (
     <AuthCard
       title="Create your account"
@@ -18,7 +23,7 @@ export default function RegisterPage() {
         </>
       }
     >
-      {isAuthConfigured ? <RegisterForm /> : <AuthNotConfigured />}
+      {isAuthConfigured ? <RegisterForm redirectTo={next} /> : <AuthNotConfigured />}
     </AuthCard>
   );
 }

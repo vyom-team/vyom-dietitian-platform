@@ -25,11 +25,12 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 4 — Organization / Practice Onboarding`
+**Current phase:** `PHASE 5 — Team & Staff Management`
 
 Implemented so far: project foundation (0), application shell and design system
-(1), Supabase/Prisma database foundation (2), and authentication with
-role-based access control and Row Level Security (3).
+(1), Supabase/Prisma database foundation (2), authentication with role-based
+access control and Row Level Security (3), practice onboarding (4), and team
+and staff management with invitations (5).
 
 Still absent by design: every product feature (clients, nutrition, foods,
 plans, billing). No screen is connected to product data.

@@ -15,7 +15,7 @@ import { signUp, type ActionState } from "@/lib/auth/actions";
 
 const initialState: ActionState = { status: "idle" };
 
-export function RegisterForm() {
+export function RegisterForm({ redirectTo }: { redirectTo?: string }) {
   const [state, formAction] = useActionState(signUp, initialState);
 
   // After a successful sign-up there is nothing left to fill in — the next step
@@ -28,6 +28,9 @@ export function RegisterForm() {
     <form action={formAction} noValidate>
       <FieldGroup>
         <FormMessage state={state} />
+
+        {/* Re-validated server-side; a tampered value falls back to the default. */}
+        <input type="hidden" name="redirectTo" value={redirectTo ?? ""} />
 
         <Field>
           <FieldLabel htmlFor="fullName">Your name</FieldLabel>

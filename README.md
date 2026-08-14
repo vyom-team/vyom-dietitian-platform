@@ -15,26 +15,27 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 5 — Team & Staff Management**
+> **Phase 6 — Client Management Foundation**
 
 The repository contains the application shell, design system, database
 foundation, authentication with role-based access control and Row Level
-Security, practice onboarding, and team management — a practice owner invites
-dietitians and receptionists, who accept an invitation and join with an
-assigned role.
+Security, practice onboarding, team management, and the client management
+foundation — a practice can create, search, assign, archive, and restore the
+people it looks after.
 
-There is **no product functionality yet** — no clients, nutrition engine, food
-database, plans, or billing.
+**No clinical data yet.** The `Client` model holds identity, contact, and
+administrative details only. Nutrition assessment, meal plans, the food
+database, progress tracking, the client portal, and billing all belong to later
+phases.
 
 > **Terminology.** The database says `Organization`; the interface says
 > **practice**. One entity, two names — see
 > [docs/organization-onboarding.md](docs/organization-onboarding.md). Do not
 > rename the models.
 
-Every screen is layout only. Where a page shows figures, they are static
-placeholders labelled as such — and no clinical value (weight, calories, macros,
-micronutrients) appears anywhere, since those must always come from real records
-and reference data.
+No clinical value (weight, calories, macros, micronutrients) appears anywhere in
+the product, since those must always come from real records and approved
+reference data.
 
 ---
 
@@ -153,8 +154,8 @@ npm run db:verify             # assert the foundation works
 Visit `/system` for a connection status page.
 
 Current models: `Organization`, `UserProfile`, `OrganizationMember`,
-`OrganizationInvitation`, `Subscription`. No client, plan, food, or nutrition
-tables yet — each arrives with the phase that owns it.
+`OrganizationInvitation`, `Subscription`, `Client`, `ClientAssignment`. No plan,
+food, or nutrition tables yet — each arrives with the phase that owns it.
 
 [docs/database.md](docs/database.md) covers conventions, indexes, the deletion
 strategy, and the migration workflow.
@@ -208,7 +209,8 @@ Full detail: [docs/authentication.md](docs/authentication.md),
 [docs/security.md](docs/security.md),
 [docs/multi-tenancy.md](docs/multi-tenancy.md),
 [docs/organization-onboarding.md](docs/organization-onboarding.md),
-[docs/team-management.md](docs/team-management.md).
+[docs/team-management.md](docs/team-management.md),
+[docs/client-management.md](docs/client-management.md).
 
 ## Team
 

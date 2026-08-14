@@ -1,144 +1,129 @@
 import type { Metadata } from "next";
-import { Filter, Search, UserPlus } from "lucide-react";
+import Link from "next/link";
+import { UserPlus, Users } from "lucide-react";
 
-import { DataTable, type Column } from "@/components/shared/data-table";
-import { StatusBadge, type StatusTone } from "@/components/shared/status-badge";
+import { EmptyState } from "@/components/shared/empty-state";
+import { ClientFilters } from "@/components/clients/client-filters";
+import { ClientList } from "@/components/clients/client-list";
+import { ClientPagination } from "@/components/clients/client-pagination";
 import { ListPage } from "@/components/templates/page-templates";
 import { Button } from "@/components/ui/button";
+import { requireClientContext } from "@/lib/auth/dal";
 import {
-  InputGroup,
-  InputGroupAddon,
-  InputGroupInput,
-} from "@/components/ui/input-group";
+  listAssignableMembers,
+  listClients,
+  seesAllClients,
+} from "@/services/clients";
+import { clientListQuerySchema } from "@/validations/client";
 
 export const metadata: Metadata = { title: "Clients" };
 
 /**
- * DESIGN PREVIEW — NOT PRODUCTION DATA.
+ * Client list.
  *
- * Rows are placeholders that exist to show table density, alignment, and status
- * treatment. Names are obviously non-real, and no clinical values (weight,
- * calories, macros) appear — those must always come from real records and
- * reference data, never from a layout file.
+ * Search, filtering, and pagination all happen in the database query. The
+ * browser never receives a client the viewer is not entitled to see, so there
+ * is nothing to hide client-side and nothing to leak in a network response.
+ *
+ * A dietitian's list is their own caseload; owners and receptionists see the
+ * whole practice. That rule lives in `seesAllClients` and is applied as a
+ * WHERE clause — see services/clients.ts.
  */
-type DemoClient = {
-  id: string;
-  name: string;
-  reference: string;
-  planStatus: { label: string; tone: StatusTone };
-  lastActivity: string;
-};
+export default async function ClientsPage({
+  searchParams,
+}: PageProps<"/clients">) {
+  const { viewer } = await requireClientContext();
+  const params = await searchParams;
 
-const demoClients: DemoClient[] = [
-  {
-    id: "1",
-    name: "Client A",
-    reference: "VY-1001",
-    planStatus: { label: "Active plan", tone: "success" },
-    lastActivity: "Today",
-  },
-  {
-    id: "2",
-    name: "Client B",
-    reference: "VY-1002",
-    planStatus: { label: "Draft", tone: "neutral" },
-    lastActivity: "Yesterday",
-  },
-  {
-    id: "3",
-    name: "Client C",
-    reference: "VY-1003",
-    planStatus: { label: "Review due", tone: "warning" },
-    lastActivity: "3 days ago",
-  },
-  {
-    id: "4",
-    name: "Client D",
-    reference: "VY-1004",
-    planStatus: { label: "No plan", tone: "info" },
-    lastActivity: "1 week ago",
-  },
-];
+  // `.catch()` in the schema clamps nonsense values rather than erroring: a
+  // hand-edited `?page=abc` should show page one, not a crash.
+  const query = clientListQuerySchema.parse({
+    q: params.q,
+    status: params.status,
+    assigned: params.assigned,
+    page: params.page,
+  });
 
-const columns: Column<DemoClient>[] = [
-  {
-    id: "name",
-    header: "Client",
-    cell: (row) => (
-      <div className="min-w-0">
-        <p className="font-medium">{row.name}</p>
-        <p className="type-caption">{row.reference}</p>
-      </div>
-    ),
-  },
-  {
-    id: "status",
-    header: "Plan status",
-    cell: (row) => (
-      <StatusBadge tone={row.planStatus.tone}>{row.planStatus.label}</StatusBadge>
-    ),
-  },
-  {
-    id: "activity",
-    header: "Last activity",
-    hideOnMobile: true,
-    cell: (row) => (
-      <span className="text-muted-foreground">{row.lastActivity}</span>
-    ),
-  },
-  {
-    id: "actions",
-    header: "",
-    align: "end",
-    width: "1%",
-    cell: () => (
-      <Button variant="ghost" size="sm" disabled>
-        View
-      </Button>
-    ),
-  },
-];
+  const showsWholePractice = seesAllClients(viewer.role);
 
-export default function ClientsPage() {
+  const [result, members] = await Promise.all([
+    listClients(viewer, query),
+    showsWholePractice
+      ? listAssignableMembers(viewer.organizationId)
+      : Promise.resolve([]),
+  ]);
+
+  const isFiltered = Boolean(query.q || query.assigned || query.status !== "active");
+  const hasNoClientsAtAll = result.total === 0 && !isFiltered;
+
   return (
     <ListPage
       title="Clients"
-      description="Manage your clients and monitor their nutrition journey."
+      description={
+        showsWholePractice
+          ? "Everyone your practice looks after."
+          : "The clients assigned to you."
+      }
       action={
-        <Button>
-          <UserPlus className="size-4" aria-hidden="true" />
-          Add client
+        <Button asChild>
+          <Link href="/clients/new">
+            <UserPlus className="size-4" aria-hidden="true" />
+            Add client
+          </Link>
         </Button>
       }
       toolbar={
-        <>
-          <InputGroup className="sm:max-w-xs">
-            <InputGroupAddon>
-              <Search className="size-4" aria-hidden="true" />
-            </InputGroupAddon>
-            <InputGroupInput
-              placeholder="Search clients"
-              aria-label="Search clients"
-              disabled
-            />
-          </InputGroup>
-          <Button variant="outline" disabled>
-            <Filter className="size-4" aria-hidden="true" />
-            Filters
-          </Button>
-        </>
+        hasNoClientsAtAll ? undefined : (
+          <ClientFilters
+            members={members}
+            canFilterByAssignee={showsWholePractice}
+          />
+        )
       }
     >
-      <DataTable
-        columns={columns}
-        rows={demoClients}
-        getRowId={(row) => row.id}
-        caption="Placeholder client list demonstrating table layout"
-      />
-      <p className="type-caption">
-        Placeholder rows shown to demonstrate table layout. Client records arrive
-        with the database.
-      </p>
+      {hasNoClientsAtAll ? (
+        <EmptyState
+          icon={Users}
+          title="No clients yet"
+          description={
+            showsWholePractice
+              ? "Start building your practice by adding your first client."
+              : "Clients assigned to you will appear here."
+          }
+          action={
+            <Button asChild>
+              <Link href="/clients/new">
+                <UserPlus className="size-4" aria-hidden="true" />
+                Add client
+              </Link>
+            </Button>
+          }
+        />
+      ) : result.clients.length === 0 ? (
+        <EmptyState
+          title="No clients match those filters"
+          description="Try a different search term, or clear the filters to see everyone."
+          action={
+            <Button variant="outline" asChild>
+              <Link href="/clients">Clear filters</Link>
+            </Button>
+          }
+        />
+      ) : (
+        <div className="space-y-4">
+          <ClientList clients={result.clients} />
+          <ClientPagination
+            page={result.page}
+            pageCount={result.pageCount}
+            total={result.total}
+            searchParams={{
+              q: query.q,
+              status: query.status === "active" ? undefined : query.status,
+              assigned: query.assigned,
+            }}
+          />
+        </div>
+      )}
     </ListPage>
   );
 }

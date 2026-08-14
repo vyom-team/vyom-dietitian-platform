@@ -244,6 +244,43 @@ export async function requireMembership(): Promise<{
 }
 
 /**
+ * The caller's practice context for client work.
+ *
+ * Bundles the three values every client query needs — organization, membership,
+ * and role — so callers cannot accidentally build a query with an organization
+ * id from somewhere else. There is no variant of this that accepts an
+ * organization id as an argument, which is deliberate.
+ *
+ * @throws redirects to onboarding when the user has no practice.
+ */
+export async function requireClientContext(): Promise<{
+  user: AuthenticatedUser;
+  viewer: {
+    organizationId: string;
+    membershipId: string;
+    role: OrganizationRole;
+  };
+}> {
+  const { user, membership } = await requireMembership();
+
+  /*
+   * A CLIENT-role member belongs to the practice but is not staff. The client
+   * portal is a later phase with much narrower access; letting them reach the
+   * staff module would expose every other client of the practice.
+   */
+  if (membership.role === "CLIENT") throw new ForbiddenError();
+
+  return {
+    user,
+    viewer: {
+      organizationId: membership.organizationId,
+      membershipId: membership.membershipId,
+      role: membership.role,
+    },
+  };
+}
+
+/**
  * The user's membership in a given organization, or null. Non-throwing variant
  * for conditionally rendering UI.
  *

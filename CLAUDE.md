@@ -25,15 +25,16 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 5 — Team & Staff Management`
+**Current phase:** `PHASE 6 — Client Management Foundation`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
-access control and Row Level Security (3), practice onboarding (4), and team
-and staff management with invitations (5).
+access control and Row Level Security (3), practice onboarding (4), team and
+staff management with invitations (5), and the client management foundation (6).
 
-Still absent by design: every product feature (clients, nutrition, foods,
-plans, billing). No screen is connected to product data.
+Still absent by design: nutrition assessment, food database, meal plans,
+progress tracking, client portal, and billing. The Client model holds no
+clinical data — that belongs to the phases that own it.
 
 **Terminology:** the database says `Organization`; the UI says **practice**.
 One entity, two names — see `docs/organization-onboarding.md`. Do not rename.

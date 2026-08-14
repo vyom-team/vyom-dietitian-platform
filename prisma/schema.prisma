@@ -86,6 +86,32 @@ enum InvitationStatus {
   @@map("invitation_status")
 }
 
+/// Lifecycle of a client record.
+///
+/// Archive, never delete: future assessments, plans, and progress records will
+/// reference clients, and clinical records carry retention obligations.
+enum ClientStatus {
+  ACTIVE
+  ARCHIVED
+
+  @@map("client_status")
+}
+
+/// Recorded because dietary reference values differ by sex, and because
+/// practitioners address clients correctly.
+///
+/// Deliberately short. It is *not* used for any decision in this phase — no
+/// calculation exists yet — and the nutrition phase will define precisely how
+/// it is used against a published reference.
+enum ClientGender {
+  FEMALE
+  MALE
+  OTHER
+  UNDISCLOSED
+
+  @@map("client_gender")
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -137,6 +163,14 @@ model Organization {
   state       String? @db.VarChar(100)
   postalCode  String? @map("postal_code") @db.VarChar(20)
 
+  /// Next client number to issue for this practice.
+  ///
+  /// A counter on the tenant row rather than `count(clients) + 1`: the count
+  /// approach races under concurrent creation and reuses numbers after an
+  /// archive. Incrementing this column takes a row lock, so two simultaneous
+  /// creations serialise and receive different numbers.
+  nextClientNumber Int @default(1) @map("next_client_number")
+
   /// Set when the organization is archived. Presence of this value — not row
   /// deletion — is what takes a tenant out of service.
   archivedAt DateTime? @map("archived_at") @db.Timestamptz(6)
@@ -147,6 +181,7 @@ model Organization {
   members      OrganizationMember[]
   subscription Subscription?
   invitations  OrganizationInvitation[]
+  clients      Client[]
 
   /// Dashboards list active organizations by recency; slug already has a unique
   /// index and needs no second one.
@@ -184,6 +219,7 @@ model UserProfile {
   memberships         OrganizationMember[]
   invitationsSent     OrganizationInvitation[] @relation("InvitationsSent")
   invitationsAccepted OrganizationInvitation[] @relation("InvitationsAccepted")
+  clientsCreated      Client[]                 @relation("ClientsCreated")
 
   @@map("user_profiles")
 }
@@ -207,8 +243,9 @@ model OrganizationMember {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user         UserProfile  @relation(fields: [userId], references: [id], onDelete: Restrict)
+  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user              UserProfile        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientAssignments ClientAssignment[]
 
   /// One membership per person per organization. Changing someone's role
   /// updates this row rather than adding another.
@@ -276,6 +313,105 @@ model OrganizationInvitation {
   /// Finds a person's invitations after they sign up under that address.
   @@index([email, status])
   @@map("organization_invitations")
+}
+
+/// A person the practice looks after.
+///
+/// A Client is a **domain record, not an identity**. Creating one does not
+/// create a Supabase Auth user, and this model holds no credentials. A future
+/// client portal will link a Client to an auth user through its own model
+/// rather than by adding auth fields here.
+///
+/// The model is deliberately confined to identity, contact, and administrative
+/// details. Weight, height, conditions, allergies, and every other clinical
+/// value belong to the assessment and nutrition models that later phases
+/// introduce — putting them here "for later" would produce a table nobody can
+/// reason about and a permissions boundary nobody can enforce.
+model Client {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+
+  /// Human-readable identifier, e.g. "VYM-000001". Generated server-side from a
+  /// per-organization counter; never accepted from a client. Unique within the
+  /// organization, not globally — practices should not be able to infer each
+  /// other's client volume from a shared sequence.
+  clientNumber String @map("client_number") @db.VarChar(20)
+
+  firstName String @map("first_name") @db.VarChar(80)
+  lastName  String @map("last_name") @db.VarChar(80)
+
+  email String? @db.VarChar(255)
+  phone String? @db.VarChar(32)
+
+  /// Date only. Age is derived when needed and never stored — it would be wrong
+  /// the day after it was written.
+  dateOfBirth DateTime?     @map("date_of_birth") @db.Date
+  gender      ClientGender?
+
+  addressLine String? @map("address_line") @db.VarChar(200)
+  city        String? @db.VarChar(100)
+  state       String? @db.VarChar(100)
+  postalCode  String? @map("postal_code") @db.VarChar(20)
+  country     String? @db.VarChar(2)
+
+  status     ClientStatus @default(ACTIVE)
+  archivedAt DateTime?    @map("archived_at") @db.Timestamptz(6)
+
+  /// Who created the record. Restrict rather than cascade: removing a staff
+  /// member must never take client records with them.
+  createdById String? @map("created_by_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy    UserProfile?       @relation("ClientsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments  ClientAssignment[]
+
+  /// Client numbers are unique per practice, and this also serves the
+  /// "open client VYM-000124" lookup.
+  @@unique([organizationId, clientNumber])
+  /// The list query: this organization's clients, filtered by status.
+  @@index([organizationId, status])
+  /// Default ordering is newest first within a practice.
+  @@index([organizationId, createdAt])
+  /// Name search. A trigram index would serve `contains` better and can be
+  /// added when volume justifies the write cost.
+  @@index([organizationId, lastName, firstName])
+  @@map("clients")
+}
+
+/// Links a client to the staff member responsible for them.
+///
+/// A join table rather than a `dietitianId` column on Client. The column would
+/// work today and would have to be unpicked the moment a practice wants two
+/// people on one client, or wants to know who handled someone last year. The
+/// join table costs one row now and forecloses nothing.
+///
+/// Phase 6 keeps a single active assignment per client, enforced by a partial
+/// unique index. Multiple concurrent assignments are a product decision, not a
+/// schema change.
+model ClientAssignment {
+  id                   String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  clientId             String @map("client_id") @db.Uuid
+  /// The membership, not the user: assignment is a role within one practice,
+  /// and referencing the membership makes a cross-organization assignment
+  /// impossible to express.
+  organizationMemberId String @map("organization_member_id") @db.Uuid
+
+  /// Null while active. Reassignment ends the current row and opens a new one,
+  /// which preserves who handled a client and when.
+  endedAt   DateTime? @map("ended_at") @db.Timestamptz(6)
+  createdAt DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  client Client             @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  member OrganizationMember @relation(fields: [organizationMemberId], references: [id], onDelete: Restrict)
+
+  /// "Which clients am I responsible for" — the dietitian's list query.
+  @@index([organizationMemberId, endedAt])
+  @@index([clientId, endedAt])
+  @@map("client_assignments")
 }
 
 /// Commercial subscription for an organization.

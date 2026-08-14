@@ -15,7 +15,7 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 6 — Client Management Foundation**
+> **Phase 7 — Nutrition Assessment Foundation**
 
 The repository contains the application shell, design system, database
 foundation, authentication with role-based access control and Row Level
@@ -23,10 +23,10 @@ Security, practice onboarding, team management, and the client management
 foundation — a practice can create, search, assign, archive, and restore the
 people it looks after.
 
-**No clinical data yet.** The `Client` model holds identity, contact, and
-administrative details only. Nutrition assessment, meal plans, the food
-database, progress tracking, the client portal, and billing all belong to later
-phases.
+Clinical data lives on `NutritionAssessment`, never on `Client` — which is what
+lets a receptionist manage a client record without being able to read their
+medical history. Meal plans, the food database, progress tracking, the client
+portal, and billing all belong to later phases.
 
 > **Terminology.** The database says `Organization`; the interface says
 > **practice**. One entity, two names — see
@@ -154,8 +154,9 @@ npm run db:verify             # assert the foundation works
 Visit `/system` for a connection status page.
 
 Current models: `Organization`, `UserProfile`, `OrganizationMember`,
-`OrganizationInvitation`, `Subscription`, `Client`, `ClientAssignment`. No plan,
-food, or nutrition tables yet — each arrives with the phase that owns it.
+`OrganizationInvitation`, `Subscription`, `Client`, `ClientAssignment`,
+`NutritionAssessment`. No plan or food tables yet — each arrives with the phase
+that owns it.
 
 [docs/database.md](docs/database.md) covers conventions, indexes, the deletion
 strategy, and the migration workflow.
@@ -210,7 +211,8 @@ Full detail: [docs/authentication.md](docs/authentication.md),
 [docs/multi-tenancy.md](docs/multi-tenancy.md),
 [docs/organization-onboarding.md](docs/organization-onboarding.md),
 [docs/team-management.md](docs/team-management.md),
-[docs/client-management.md](docs/client-management.md).
+[docs/client-management.md](docs/client-management.md),
+[docs/nutrition-assessment.md](docs/nutrition-assessment.md).
 
 ## Team
 

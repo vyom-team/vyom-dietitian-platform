@@ -1,19 +1,20 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { Pencil } from "lucide-react";
+import { ClipboardList, Pencil } from "lucide-react";
 
 import {
   ArchiveClientButton,
   AssignClientDialog,
   RestoreClientButton,
 } from "@/components/clients/client-actions";
+import { AssessmentHistory } from "@/components/assessments/assessment-history";
 import { Breadcrumbs } from "@/components/shared/breadcrumbs";
 import { PageHeader } from "@/components/shared/page-header";
 import { Section } from "@/components/shared/section";
 import { StatusBadge } from "@/components/shared/status-badge";
 import { Button } from "@/components/ui/button";
-import { requireClientContext } from "@/lib/auth/dal";
+import { canAccessClinicalData, requireClientContext } from "@/lib/auth/dal";
 import { CLIENT_GENDER_LABELS } from "@/validations/client";
 import { getCountryLabel } from "@/lib/locale";
 import {
@@ -21,6 +22,7 @@ import {
   listAssignableMembers,
   seesAllClients,
 } from "@/services/clients";
+import { listAssessments } from "@/services/assessments";
 
 export const metadata: Metadata = { title: "Client" };
 
@@ -33,9 +35,9 @@ export const metadata: Metadata = { title: "Client" };
  * to a genuinely nonexistent client, so this route cannot be used to discover
  * which ids exist elsewhere.
  *
- * There are deliberately no Assessment / Meal Plan / Progress tabs. Those
- * modules do not exist, and empty tabs promising them would misrepresent what
- * the product does.
+ * The Nutrition section is clinical and is rendered only for clinical roles.
+ * Meal plans and progress tracking have no section here because those modules
+ * do not exist — an empty tab promising them would misrepresent the product.
  */
 export default async function ClientProfilePage({
   params,
@@ -47,9 +49,21 @@ export default async function ClientProfilePage({
   if (!client) notFound();
 
   const canManage = seesAllClients(viewer.role) && viewer.role !== "RECEPTIONIST";
-  const members = canManage
-    ? await listAssignableMembers(viewer.organizationId)
-    : [];
+
+  /*
+   * The nutrition section is clinical, so a RECEPTIONIST does not see it at
+   * all — and would be refused by `requireClinicalContext` and by RLS if they
+   * navigated to the URL directly. Only fetched when it will be rendered, so a
+   * receptionist's page load carries no health data.
+   */
+  const canSeeClinical = canAccessClinicalData(viewer.role);
+
+  const [members, assessments] = await Promise.all([
+    canManage ? listAssignableMembers(viewer.organizationId) : Promise.resolve([]),
+    canSeeClinical
+      ? listAssessments(viewer, clientId, 5)
+      : Promise.resolve([]),
+  ]);
 
   const name = `${client.firstName} ${client.lastName}`;
   const isArchived = client.status === "ARCHIVED";
@@ -165,6 +179,25 @@ export default async function ClientProfilePage({
           </dl>
         </Section>
       </div>
+
+      {canSeeClinical ? (
+        <Section
+          title="Nutrition"
+          description="Assessments recorded for this client, newest first."
+          action={
+            assessments.length > 0 ? (
+              <Button variant="outline" size="sm" asChild>
+                <Link href={`/clients/${client.id}/assessments/new`}>
+                  <ClipboardList className="size-4" aria-hidden="true" />
+                  New assessment
+                </Link>
+              </Button>
+            ) : undefined
+          }
+        >
+          <AssessmentHistory assessments={assessments} clientId={client.id} />
+        </Section>
+      ) : null}
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { defineConfig } from "vitest/config";
+import { resolve } from "node:path";
 import { config as loadEnv } from "dotenv";
 
 /**
@@ -12,6 +13,17 @@ loadEnv({ path: ".env.local", quiet: true });
 loadEnv({ quiet: true });
 
 export default defineConfig({
+  resolve: {
+    /**
+     * Mirrors the `@/*` path alias from tsconfig.
+     *
+     * Type-only aliased imports are erased at compile time, so earlier suites
+     * never needed this. A module with a *runtime* aliased import — such as
+     * validations/assessment.ts pulling in the BMI bounds — fails to resolve
+     * without it.
+     */
+    alias: { "@": resolve(import.meta.dirname, "src") },
+  },
   test: {
     environment: "node",
     include: ["tests/**/*.test.ts"],

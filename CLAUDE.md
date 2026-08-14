@@ -25,16 +25,23 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 6 — Client Management Foundation`
+**Current phase:** `PHASE 7 — Nutrition Assessment Foundation`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
 access control and Row Level Security (3), practice onboarding (4), team and
-staff management with invitations (5), and the client management foundation (6).
+staff management with invitations (5), the client management foundation (6),
+and the nutrition assessment foundation (7).
 
-Still absent by design: nutrition assessment, food database, meal plans,
-progress tracking, client portal, and billing. The Client model holds no
-clinical data — that belongs to the phases that own it.
+Still absent by design: food database, meal plans, progress tracking, client
+portal, and billing. The Client model holds no clinical data — that lives on
+NutritionAssessment.
+
+**No derived nutrition value is stored or calculated anywhere.** BMI is the one
+exception and is derived on read, returned as a bare number with no category:
+Asian-Indian cutoffs come from the PRD and are not in this repo. Calories,
+macros, TDEE, and BMR need reference values we do not have — see
+`docs/nutrition-assessment.md`.
 
 **Terminology:** the database says `Organization`; the UI says **practice**.
 One entity, two names — see `docs/organization-onboarding.md`. Do not rename.

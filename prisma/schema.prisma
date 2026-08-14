@@ -112,6 +112,72 @@ enum ClientGender {
   @@map("client_gender")
 }
 
+/// Why an assessment was taken.
+///
+/// Two values only. A larger speculative enum would invite dead options; more
+/// can be added when a real workflow needs them.
+enum AssessmentType {
+  INITIAL
+  FOLLOW_UP
+
+  @@map("assessment_type")
+}
+
+/// Whether an assessment is still being filled in.
+///
+/// Two states, deliberately. Approval and review workflows are not part of how
+/// a dietitian works today, and inventing them would add ceremony nobody asked
+/// for.
+enum AssessmentStatus {
+  DRAFT
+  COMPLETED
+
+  @@map("assessment_status")
+}
+
+/// Habitual physical activity, as judged by the practitioner.
+///
+/// Recorded only. It is **not** multiplied by anything: activity factors for
+/// energy requirements come from the PRD and are unknown to this codebase, so
+/// no calculation may use this value until that phase supplies them.
+enum ActivityLevel {
+  SEDENTARY
+  LIGHTLY_ACTIVE
+  MODERATELY_ACTIVE
+  VERY_ACTIVE
+
+  @@map("activity_level")
+}
+
+/// Dietary pattern. `EGGETARIAN` is included because it is a distinct and
+/// common category in Indian practice, not a variant of vegetarian.
+enum DietType {
+  VEGETARIAN
+  EGGETARIAN
+  NON_VEGETARIAN
+  VEGAN
+  OTHER
+
+  @@map("diet_type")
+}
+
+/// What the client wants to achieve, in their practitioner's words.
+///
+/// Recorded, never prescribed. Nothing derives a calorie deficit, a protein
+/// target, or a meal frequency from this — those require reference values this
+/// phase does not have.
+enum PrimaryGoal {
+  WEIGHT_LOSS
+  WEIGHT_GAIN
+  WEIGHT_MAINTENANCE
+  MUSCLE_GAIN
+  GENERAL_WELLNESS
+  CONDITION_MANAGEMENT
+  OTHER
+
+  @@map("primary_goal")
+}
+
 enum SubscriptionStatus {
   TRIALING
   ACTIVE
@@ -182,6 +248,7 @@ model Organization {
   subscription Subscription?
   invitations  OrganizationInvitation[]
   clients      Client[]
+  assessments  NutritionAssessment[]
 
   /// Dashboards list active organizations by recency; slug already has a unique
   /// index and needs no second one.
@@ -243,9 +310,10 @@ model OrganizationMember {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization      Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user              UserProfile        @relation(fields: [userId], references: [id], onDelete: Restrict)
-  clientAssignments ClientAssignment[]
+  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                UserProfile           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientAssignments   ClientAssignment[]
+  assessmentsAuthored NutritionAssessment[]
 
   /// One membership per person per organization. Changing someone's role
   /// updates this row rather than adding another.
@@ -364,9 +432,10 @@ model Client {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy    UserProfile?       @relation("ClientsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy    UserProfile?          @relation("ClientsCreated", fields: [createdById], references: [id], onDelete: SetNull)
   assignments  ClientAssignment[]
+  assessments  NutritionAssessment[]
 
   /// Client numbers are unique per practice, and this also serves the
   /// "open client VYM-000124" lookup.
@@ -412,6 +481,113 @@ model ClientAssignment {
   @@index([organizationMemberId, endedAt])
   @@index([clientId, endedAt])
   @@map("client_assignments")
+}
+
+/// A nutrition assessment taken for a client at a point in time.
+///
+/// A client accumulates assessments; each is a **separate, immutable-in-spirit
+/// record of one consultation**. A follow-up creates a new row rather than
+/// overwriting the previous one, because the value of this data is the trend
+/// across visits, and an overwrite destroys exactly that.
+///
+/// SENSITIVITY: this table holds health information — conditions, medications,
+/// allergies, and clinical notes. Access is restricted to clinical roles
+/// (OWNER, DIETITIAN); a RECEPTIONIST who may manage the client record has no
+/// business reading it. Nothing in the service logs these fields.
+///
+/// SCOPE: no calorie, protein, macro, or micronutrient value appears here. This
+/// phase records what the practitioner observed. Deriving requirements needs
+/// reference values from the PRD that this codebase does not have, and
+/// inventing them would violate the project's prime directive.
+model NutritionAssessment {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  /// Denormalised from the client so every policy and query can scope on it
+  /// directly, without a join. Kept consistent by a database trigger.
+  organizationId String @map("organization_id") @db.Uuid
+  clientId       String @map("client_id") @db.Uuid
+
+  /// The membership that recorded it, not the user: attribution belongs to a
+  /// role within one practice, and the same person may work at several.
+  createdByMemberId String @map("created_by_member_id") @db.Uuid
+
+  assessmentType AssessmentType   @map("assessment_type")
+  status         AssessmentStatus @default(DRAFT)
+
+  /// The business date of the consultation — a calendar day, stored as DATE.
+  /// Distinct from `createdAt`, which is when the row was written.
+  assessmentDate DateTime @map("assessment_date") @db.Date
+
+  // --- Measurements ---------------------------------------------------------
+  // Canonical SI units, always. Never "5'8\"" or "70 kg" as text: a formatted
+  // string cannot be compared across visits or converted for display.
+  //
+  // Decimal, not Float. Binary floating point cannot represent 70.1 exactly,
+  // and a measurement that changes when it round-trips is unacceptable in a
+  // clinical record.
+  heightCm Decimal? @map("height_cm") @db.Decimal(5, 1)
+  weightKg Decimal? @map("weight_kg") @db.Decimal(5, 1)
+
+  // BMI is deliberately NOT stored. It is a pure function of height and weight,
+  // and a stored copy can drift out of step with them the moment either is
+  // corrected. It is derived on read — see src/lib/assessments/bmi.ts.
+
+  // --- Health background ----------------------------------------------------
+  // Free text, entered by the practitioner. A coded terminology system (SNOMED,
+  // ICD) is a serious undertaking and would be premature; these fields record
+  // what the clinician wrote, which is what a nutrition assessment actually is.
+  medicalHistory        String? @map("medical_history") @db.Text
+  healthConditions      String? @map("health_conditions") @db.Text
+  currentMedications    String? @map("current_medications") @db.Text
+  /// Kept separate from food preferences on purpose: an allergy is a safety
+  /// constraint, a dislike is a preference. Merging them would let a future
+  /// meal planner treat "doesn't like mushrooms" as clinically equivalent to
+  /// "peanut allergy".
+  allergiesIntolerances String? @map("allergies_intolerances") @db.Text
+
+  // --- Lifestyle ------------------------------------------------------------
+  activityLevel     ActivityLevel? @map("activity_level")
+  exerciseFrequency String?        @map("exercise_frequency") @db.VarChar(200)
+  occupation        String?        @db.VarChar(200)
+  sleepPattern      String?        @map("sleep_pattern") @db.VarChar(200)
+  /// Litres per day. Numeric so it can be trended; nothing acts on it yet.
+  waterLitresPerDay Decimal?       @map("water_litres_per_day") @db.Decimal(3, 1)
+
+  // --- Diet -----------------------------------------------------------------
+  dietType      DietType? @map("diet_type")
+  /// Only meaningful when dietType is OTHER.
+  dietTypeOther String?   @map("diet_type_other") @db.VarChar(120)
+
+  foodPreferences     String? @map("food_preferences") @db.Text
+  foodsDisliked       String? @map("foods_disliked") @db.Text
+  foodsAvoided        String? @map("foods_avoided") @db.Text
+  dietaryRestrictions String? @map("dietary_restrictions") @db.Text
+
+  // --- Goals ----------------------------------------------------------------
+  primaryGoal      PrimaryGoal? @map("primary_goal")
+  primaryGoalOther String?      @map("primary_goal_other") @db.VarChar(120)
+  goalNotes        String?      @map("goal_notes") @db.Text
+
+  // --- Notes ----------------------------------------------------------------
+  assessmentNotes String? @map("assessment_notes") @db.Text
+
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+  createdAt   DateTime  @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt   DateTime  @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  /// Restrict on both: an assessment is a clinical record and must survive the
+  /// removal of anything that references it. Archiving a client leaves their
+  /// assessment history untouched.
+  organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client          Client             @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdByMember OrganizationMember @relation(fields: [createdByMemberId], references: [id], onDelete: Restrict)
+
+  /// The history query: one client's assessments, newest first.
+  @@index([clientId, assessmentDate(sort: Desc)])
+  /// Practice-wide scoping, and the drafts-outstanding view.
+  @@index([organizationId, status])
+  @@index([organizationId, assessmentDate])
+  @@index([createdByMemberId])
+  @@map("nutrition_assessments")
 }
 
 /// Commercial subscription for an organization.

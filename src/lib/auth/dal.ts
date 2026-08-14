@@ -14,6 +14,7 @@ import {
   SIGN_IN_PATH,
 } from "@/lib/auth/routes";
 import { ForbiddenError, NoOrganizationError } from "@/lib/auth/errors";
+import { CLINICAL_ROLES, hasRole } from "@/lib/auth/roles";
 
 /**
  * Data Access Layer — the authoritative authorization boundary.
@@ -278,6 +279,44 @@ export async function requireClientContext(): Promise<{
       role: membership.role,
     },
   };
+}
+
+/**
+ * Practice context for **clinical** work — nutrition assessments and anything
+ * else holding health information.
+ *
+ * Stricter than `requireClientContext`: a RECEPTIONIST may create and manage
+ * client records but has no clinical reason to read conditions, medications,
+ * allergies, or assessment notes, so they are refused here.
+ *
+ * This is the server-side half of that boundary. The database half is the RLS
+ * policy built on `vyom_private.current_clinical_organization_ids()`, which
+ * excludes the same roles. Hiding the navigation link is neither.
+ *
+ * @throws {ForbiddenError} for RECEPTIONIST and CLIENT roles.
+ */
+export async function requireClinicalContext(): Promise<{
+  user: AuthenticatedUser;
+  viewer: {
+    organizationId: string;
+    membershipId: string;
+    role: OrganizationRole;
+  };
+}> {
+  const { user, viewer } = await requireClientContext();
+
+  if (!hasRole(viewer.role, CLINICAL_ROLES)) throw new ForbiddenError();
+
+  return { user, viewer };
+}
+
+/**
+ * Whether a role may read clinical data. Non-throwing, for deciding whether to
+ * render a nutrition section — the action behind it still calls
+ * `requireClinicalContext`.
+ */
+export function canAccessClinicalData(role: OrganizationRole): boolean {
+  return hasRole(role, CLINICAL_ROLES);
 }
 
 /**

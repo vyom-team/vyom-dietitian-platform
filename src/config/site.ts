@@ -12,7 +12,7 @@ export const siteConfig = {
    * Current development phase. Update this as phases are completed.
    * See CLAUDE.md for the phase-gating rule.
    */
-  phase: "Phase 7 — Nutrition Assessment",
+  phase: "Phase 8A — Nutrition Data Foundation",
 } as const;
 
 export type SiteConfig = typeof siteConfig;

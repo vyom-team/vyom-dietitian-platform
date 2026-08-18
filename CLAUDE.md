@@ -25,17 +25,26 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 7 — Nutrition Assessment Foundation`
+**Current phase:** `PHASE 8A — Nutrition Data Foundation`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
 access control and Row Level Security (3), practice onboarding (4), team and
 staff management with invitations (5), the client management foundation (6),
-and the nutrition assessment foundation (7).
+the nutrition assessment foundation (7), and the nutrition data and
+dataset-ingestion foundation (8A).
 
-Still absent by design: food database, meal plans, progress tracking, client
-portal, and billing. The Client model holds no clinical data — that lives on
-NutritionAssessment.
+Still absent by design: the nutrition calculation engine, meal plans, recipes,
+the food database UI, progress tracking, client portal, and billing. The Client
+model holds no clinical data — that lives on NutritionAssessment.
+
+**Nutrition reference data is global, not tenant-owned.** Foods, nutrients, and
+their values belong to no organization: readable by any clinical user of any
+practice, writable by none of them. That is the one place a cross-tenant read
+is correct — see `docs/nutrition-data.md`. Every value traces to a source
+version, and **no dataset is cleared for commercial use**; all are
+DEVELOPMENT_ONLY until reviewed. A missing nutrient value is the absence of a
+row, never a zero.
 
 **No derived nutrition value is stored or calculated anywhere.** BMI is the one
 exception and is derived on read, returned as a bare number with no category:

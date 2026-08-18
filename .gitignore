@@ -61,3 +61,11 @@ next-env.d.ts
 /.claude/
 /.windsurf/
 /skills-lock.json
+
+# raw nutrition datasets — NEVER committed
+#
+# These are third-party files (IFCT, INDB, USDA) whose redistribution terms
+# have not been reviewed for this project, and they are not ours to publish.
+# The importer reads them from here; the web application never does.
+# Override the location with NUTRITION_DATA_DIR.
+/data/nutrition/

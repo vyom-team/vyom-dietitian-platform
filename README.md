@@ -15,7 +15,7 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 7 — Nutrition Assessment Foundation**
+> **Phase 8A — Nutrition Data Foundation**
 
 The repository contains the application shell, design system, database
 foundation, authentication with role-based access control and Row Level
@@ -212,7 +212,8 @@ Full detail: [docs/authentication.md](docs/authentication.md),
 [docs/organization-onboarding.md](docs/organization-onboarding.md),
 [docs/team-management.md](docs/team-management.md),
 [docs/client-management.md](docs/client-management.md),
-[docs/nutrition-assessment.md](docs/nutrition-assessment.md).
+[docs/nutrition-assessment.md](docs/nutrition-assessment.md),
+[docs/nutrition-data.md](docs/nutrition-data.md).
 
 ## Team
 

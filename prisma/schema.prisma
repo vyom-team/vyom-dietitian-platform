@@ -620,3 +620,601 @@ model Subscription {
   @@index([status, trialEndsAt])
   @@map("subscriptions")
 }
+
+// ---------------------------------------------------------------------------
+// Phase 8A — nutrition reference data
+//
+// GLOBAL, NOT TENANT-OWNED. Everything below deliberately has no
+// `organizationId`. IFCT's value for toor dal is the same fact for every
+// practice, and copying it per tenant would multiply one dataset by the
+// customer count and make a correction impossible to apply.
+//
+// This is the first data in the product that crosses tenants, so the security
+// posture is inverted from every model above: readable by any clinical user of
+// any practice, writable by nobody through the browser. See the migration.
+//
+// Organization-scoped custom foods and recipes are a later phase. They get
+// their own models with an organizationId, not a nullable column here.
+// ---------------------------------------------------------------------------
+
+/// Whether a dataset may be used commercially or redistributed.
+///
+/// `UNKNOWN` is the default and means exactly that — nobody has checked. It is
+/// never to be read as permission. Some Indian nutrition datasets carry
+/// restrictions that have not been reviewed for this project.
+enum DataUseStatus {
+  UNKNOWN
+  PERMITTED
+  RESTRICTED
+  PROHIBITED
+
+  @@map("data_use_status")
+}
+
+/// How far a source has got through licence review.
+///
+/// Defaults to DEVELOPMENT_ONLY. Nothing in this codebase may set APPROVED —
+/// that is a human legal decision recorded deliberately, not an import default.
+enum SourcePermissionStatus {
+  DEVELOPMENT_ONLY
+  PENDING_REVIEW
+  APPROVED
+  REJECTED
+
+  @@map("source_permission_status")
+}
+
+/// Whether a source is in use. Superseded sources stay readable: food records
+/// already reference them, and provenance must survive.
+enum NutritionSourceStatus {
+  ACTIVE
+  SUPERSEDED
+  DISABLED
+
+  @@map("nutrition_source_status")
+}
+
+/// What kind of nutrient this is. Drives grouping in a future UI; carries no
+/// calculation meaning.
+enum NutrientCategory {
+  ENERGY
+  MACRONUTRIENT
+  MINERAL
+  VITAMIN
+  OTHER
+
+  @@map("nutrient_category")
+}
+
+/// Units a nutrient value can be expressed in.
+///
+/// Deliberately separate from the `Unit` table, which describes portions
+/// (grams, cups, katori). "Katori" is never a nutrient unit, and one shared
+/// vocabulary would permit it.
+enum NutrientUnit {
+  KCAL
+  KJ
+  G
+  MG
+  UG
+  IU
+
+  @@map("nutrient_unit")
+}
+
+/// Controlled food category. Extensible: adding a value is a migration, which
+/// is the point — categories should not drift silently per import.
+enum FoodCategory {
+  GRAINS
+  PULSES
+  LEGUMES
+  VEGETABLES
+  FRUITS
+  DAIRY
+  NUTS
+  SEEDS
+  OILS
+  SPICES
+  BEVERAGES
+  MEAT
+  SEAFOOD
+  EGGS
+  PREPARED_FOODS
+  OTHER
+
+  @@map("food_category")
+}
+
+/// The form a food is in — orthogonal to its category. Rice is GRAINS whether
+/// RAW or COOKED, and the nutrition differs sharply between the two.
+///
+/// There is deliberately no RECIPE value. A recipe is a different entity with
+/// ingredients and a yield, and it arrives in a later phase with its own model.
+/// A RECIPE value here would invite recipes into the foods table.
+enum FoodType {
+  RAW
+  COOKED
+  PROCESSED
+  PACKAGED
+  PREPARED
+  INGREDIENT
+
+  @@map("food_type")
+}
+
+/// Whether an external dataset record has been tied to a canonical food.
+///
+/// REVIEW_REQUIRED is the safe landing place for ambiguity. "Milk", "Milk,
+/// whole", and "Milk, toned" must never be merged automatically on name
+/// similarity — they are different foods with different nutrition.
+enum SourceFoodMappingStatus {
+  UNMAPPED
+  MAPPED
+  REVIEW_REQUIRED
+  REJECTED
+
+  @@map("source_food_mapping_status")
+}
+
+/// What a unit measures. HOUSEHOLD units (cup, katori, glass) have no universal
+/// conversion to grams — that depends on the food's density, which is why
+/// UnitConversion can be food-specific.
+enum UnitCategory {
+  WEIGHT
+  VOLUME
+  COUNT
+  HOUSEHOLD
+
+  @@map("unit_category")
+}
+
+/// Outcome of one ingestion run.
+///
+/// PARTIAL is a first-class result, not a failure: a dataset with a handful of
+/// malformed rows should import the good ones and report the rest, rather than
+/// discarding thousands of valid records.
+enum DatasetImportStatus {
+  RUNNING
+  COMPLETED
+  PARTIAL
+  FAILED
+
+  @@map("dataset_import_status")
+}
+
+/// A publisher of nutrition reference data — ICMR-NIN, USDA, and so on.
+///
+/// Holds identity and **licence terms**, which belong to the publisher rather
+/// than to any one release. A specific release is a NutritionSourceVersion.
+///
+/// LICENCE POSTURE: every status field defaults to "not established". This
+/// project is in development; no dataset here has been cleared for commercial
+/// use, and the schema is built so that saying otherwise takes a deliberate
+/// human write. See docs/nutrition-data.md.
+model NutritionSource {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Stable machine identifier, e.g. "IFCT", "INDB", "USDA_FDC". Referenced by
+  /// import configuration, so it must not change once data exists.
+  code String @unique @db.VarChar(40)
+  name String @db.VarChar(200)
+
+  /// Publishing body, e.g. "ICMR-National Institute of Nutrition".
+  organization String? @db.VarChar(200)
+  /// ISO 3166-1 alpha-2 of the population the data describes, e.g. "IN".
+  /// India-first: this is what keeps foreign reference values from being
+  /// applied to Indian clients by accident.
+  country      String? @db.VarChar(2)
+  region       String? @db.VarChar(100)
+
+  description String? @db.Text
+  sourceUrl   String? @map("source_url") @db.Text
+
+  licenseName String? @map("license_name") @db.VarChar(200)
+  licenseUrl  String? @map("license_url") @db.Text
+
+  /// All three default to "not established". Never inferred from a licence
+  /// name, a URL, or the absence of a notice.
+  commercialUseStatus  DataUseStatus          @default(UNKNOWN) @map("commercial_use_status")
+  redistributionStatus DataUseStatus          @default(UNKNOWN) @map("redistribution_status")
+  permissionStatus     SourcePermissionStatus @default(DEVELOPMENT_ONLY) @map("permission_status")
+
+  /// Whether attribution must be displayed wherever values from this source
+  /// appear. Defaults to true: attributing unnecessarily is harmless, failing
+  /// to attribute is not.
+  attributionRequired Boolean @default(true) @map("attribution_required")
+  /// The exact wording to display, when the licence specifies one.
+  attributionText     String? @map("attribution_text") @db.Text
+
+  status NutritionSourceStatus @default(ACTIVE)
+
+  /// Free-form provenance that does not deserve a column — contact details,
+  /// review notes, correspondence references.
+  metadata Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  versions NutritionSourceVersion[]
+
+  @@index([status])
+  @@map("nutrition_sources")
+}
+
+/// One published release of a source — IFCT 2017, a future IFCT revision, an
+/// INDB release.
+///
+/// Separate from NutritionSource because a new release must not corrupt
+/// existing records. Values reference the *version*, so importing a later IFCT
+/// leaves every IFCT 2017 value intact and still attributable. A single table
+/// would have forced either an overwrite or a duplicated licence per release.
+model NutritionSourceVersion {
+  id       String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceId String @map("source_id") @db.Uuid
+
+  /// The publisher's own version label, e.g. "2017". Not parsed or compared as
+  /// a number — version schemes differ between publishers.
+  version String @db.VarChar(40)
+
+  /// When the publisher released it, where known. Distinct from importedAt.
+  releasedOn DateTime? @map("released_on") @db.Date
+  /// When Vyom last ingested it. Null until an import completes.
+  importedAt DateTime? @map("imported_at") @db.Timestamptz(6)
+
+  notes    String? @db.Text
+  metadata Json?   @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  source          NutritionSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  foodNutrients   FoodNutrient[]
+  sourceFoods     SourceFood[]
+  imports         DatasetImport[]
+  foodsOriginated Food[]          @relation("FoodOriginVersion")
+
+  /// One row per release of a source. This pair is also the natural key the
+  /// importer resolves from configuration.
+  @@unique([sourceId, version])
+  @@index([sourceId])
+  @@map("nutrition_source_versions")
+}
+
+/// The nutrient dictionary — the vocabulary every measured value refers to.
+///
+/// A dictionary rather than columns on Food. A wide table would need a
+/// migration per nutrient, could not record which source supplied which value,
+/// and would make "the source did not measure this" indistinguishable from
+/// "this is zero".
+model Nutrient {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Stable internal identifier, e.g. "ENERGY", "PROTEIN", "VITAMIN_C". Import
+  /// mappings are written against this, so it must never be renamed in place.
+  code String @unique @db.VarChar(60)
+  name String @db.VarChar(120)
+
+  category NutrientCategory
+  /// The unit values of this nutrient are stored in. A value arriving in a
+  /// different unit is a validation failure, never a silent conversion.
+  unit     NutrientUnit
+
+  description String? @db.Text
+
+  /// Ordering for a future UI. Display concern only.
+  displayOrder Int     @default(0) @map("display_order")
+  isActive     Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  foodNutrients FoodNutrient[]
+
+  @@index([category, displayOrder])
+  @@map("nutrients")
+}
+
+/// A canonical Vyom food.
+///
+/// This is the entity the rest of the product talks to. It is *not* an IFCT row
+/// or an INDB row — those are SourceFood records that map onto this. That
+/// indirection is the whole point: a dietitian picks "Toor Dal", and which
+/// dataset supplied its protein figure is provenance, not identity.
+///
+/// Carries no nutrient columns. Values live in FoodNutrient, one row per
+/// nutrient per source version.
+model Food {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// The name a practitioner sees. Regional and alternate names are aliases.
+  canonicalName String  @map("canonical_name") @db.VarChar(200)
+  description   String? @db.Text
+
+  category FoodCategory
+  foodType FoodType     @map("food_type")
+
+  /// Which dataset release this canonical record was first derived from.
+  /// Provenance, not authority — a food may later carry values from several
+  /// sources, and one created by hand has no origin version at all.
+  originSourceVersionId String? @map("origin_source_version_id") @db.Uuid
+  /// The publisher's own identifier in that release, e.g. an IFCT food code.
+  /// Kept verbatim so a value can always be traced back to its printed row.
+  originSourceFoodId    String? @map("origin_source_food_id") @db.VarChar(80)
+
+  /// Deactivated rather than deleted: plans and logs will reference foods, and
+  /// a withdrawn food must not break a historical record.
+  isActive Boolean @default(true) @map("is_active")
+
+  metadata Json? @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  originSourceVersion NutritionSourceVersion? @relation("FoodOriginVersion", fields: [originSourceVersionId], references: [id], onDelete: Restrict)
+  nutrients           FoodNutrient[]
+  aliases             FoodAlias[]
+  sourceFoods         SourceFood[]
+  unitConversions     UnitConversion[]
+
+  /// Idempotency key for imports. Re-running an import finds the food it
+  /// created last time instead of inserting a second copy.
+  @@unique([originSourceVersionId, originSourceFoodId], map: "foods_origin_unique")
+  @@index([category, isActive])
+  @@index([canonicalName])
+  @@map("foods")
+}
+
+/// An alternate name for a food — "Tur Dal", "Arhar Dal", "Pigeon Pea".
+///
+/// The foundation for search, not a translation system. `languageCode` is
+/// recorded where known so a later phase can build on it without a migration,
+/// but nothing localises anything yet.
+model FoodAlias {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId String @map("food_id") @db.Uuid
+
+  alias String @db.VarChar(200)
+  /// ISO 639-1 where known, e.g. "hi", "ta". Null for an unlabelled variant.
+  languageCode String? @map("language_code") @db.VarChar(8)
+  /// Where in India this name is used. Free text: regional naming does not fit
+  /// a fixed list, and guessing one would exclude real names.
+  region       String? @db.VarChar(100)
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  food Food @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  /// The same alias twice on one food is noise, and re-running an import must
+  /// not accumulate copies.
+  @@unique([foodId, alias])
+  @@index([alias])
+  @@map("food_aliases")
+}
+
+/// One measured nutrient value for one food, from one source release.
+///
+/// THE MISSING/ZERO RULE: a row exists only when the source actually published
+/// a value. "Not measured" is the absence of a row, never a zero. Zero means
+/// the source measured it and found none — a different fact, and one that
+/// matters when a dietitian is looking at iron content.
+///
+/// NUMERIC, never float. These are authoritative reference values; a figure
+/// that changes when it round-trips through binary floating point is not
+/// reference data.
+model FoodNutrient {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId     String @map("food_id") @db.Uuid
+  nutrientId String @map("nutrient_id") @db.Uuid
+
+  /// Which release supplied this figure. Required — a nutrition value with no
+  /// traceable origin is exactly what this phase exists to prevent.
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  /// Stored exactly as published, unrounded. Display rounding is a UI concern.
+  value Decimal      @db.Decimal(14, 6)
+  /// Denormalised from the nutrient so a value keeps the unit it was validated
+  /// against, even if the dictionary entry is later corrected. A mismatch
+  /// between the two is a data-quality signal, not something to silently fix.
+  unit  NutrientUnit
+
+  /// What the value is per — 100 g for IFCT and USDA. Without this a figure is
+  /// meaningless, and assuming 100 g for a source that publishes per-serving
+  /// would corrupt every calculation built on it later.
+  basisQuantity Decimal @default(100) @map("basis_quantity") @db.Decimal(12, 4)
+  basisUnitCode String  @default("g") @map("basis_unit_code") @db.VarChar(20)
+
+  /// The publisher's own nutrient identifier, kept verbatim for traceability.
+  sourceNutrientCode String? @map("source_nutrient_code") @db.VarChar(80)
+  /// Analytical detail from the source: method, sample count, whether the
+  /// figure was imputed. Preserved rather than discarded.
+  metadata           Json?   @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  food          Food                   @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  nutrient      Nutrient               @relation(fields: [nutrientId], references: [id], onDelete: Restrict)
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+
+  /// One value per nutrient per food per release — which is what makes an
+  /// import idempotent, and what lets IFCT 2017 and a later revision coexist
+  /// on the same food without either overwriting the other.
+  @@unique([foodId, nutrientId, sourceVersionId])
+  @@index([foodId])
+  @@index([nutrientId])
+  @@index([sourceVersionId])
+  @@map("food_nutrients")
+}
+
+/// An external dataset record, and what it maps to.
+///
+/// The staging boundary between "what the file said" and "what Vyom believes".
+/// Every row read from a dataset lands here with its original identifier and
+/// name, whether or not it could be tied to a canonical food.
+///
+/// This is what makes matching auditable rather than magical. Nothing here is
+/// AI: mapping is deterministic on the publisher's identifier, and anything
+/// ambiguous is parked at REVIEW_REQUIRED for a human.
+model SourceFood {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  /// The publisher's identifier within that release, verbatim.
+  externalId       String  @map("external_id") @db.VarChar(80)
+  externalName     String  @map("external_name") @db.VarChar(300)
+  /// The publisher's own category wording, before it was mapped onto
+  /// FoodCategory. Kept so a mis-mapping can be found and re-run.
+  externalCategory String? @map("external_category") @db.VarChar(200)
+
+  /// Null until mapped. A row with no canonical food is not a failure — it is
+  /// an honest record of something the importer would not guess at.
+  foodId String? @map("food_id") @db.Uuid
+
+  mappingStatus SourceFoodMappingStatus @default(UNMAPPED) @map("mapping_status")
+  /// 0–1, how certain the deterministic match was. Recorded for review
+  /// ordering; nothing acts on it automatically.
+  confidence    Decimal?                @db.Decimal(4, 3)
+  notes         String?                 @db.Text
+
+  /// The original row, as parsed. The audit trail of record: whatever a later
+  /// normalisation gets wrong can be recovered from here without the file.
+  rawPayload Json? @map("raw_payload") @db.JsonB
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+  food          Food?                  @relation(fields: [foodId], references: [id], onDelete: SetNull)
+
+  /// Duplicate detection: source + version + external id. Re-reading the same
+  /// file updates these rows rather than duplicating them.
+  @@unique([sourceVersionId, externalId])
+  @@index([mappingStatus])
+  @@index([foodId])
+  @@map("source_foods")
+}
+
+/// A unit of measure — grams, millilitres, katori, piece.
+///
+/// The model only. Phase 8A establishes the vocabulary and the shape of a
+/// conversion; the conversion *engine* belongs to the calculation phase, where
+/// it can be built against reference portion sizes rather than guessed.
+model Unit {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// Stable identifier, e.g. "g", "ml", "katori".
+  code     String       @unique @db.VarChar(20)
+  name     String       @db.VarChar(80)
+  category UnitCategory
+
+  /// The base unit of its category — grams for WEIGHT, millilitres for VOLUME.
+  /// Exactly one per category; enforced by a partial unique index.
+  isCanonical Boolean @default(false) @map("is_canonical")
+
+  /// True for units whose gram equivalent depends on the food. A katori of dal
+  /// and a katori of rice do not weigh the same, so these can never have a
+  /// single global conversion.
+  requiresFoodContext Boolean @default(false) @map("requires_food_context")
+
+  description String? @db.Text
+  isActive    Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  conversionsFrom UnitConversion[] @relation("ConversionFrom")
+  conversionsTo   UnitConversion[] @relation("ConversionTo")
+
+  @@index([category, isActive])
+  @@map("units")
+}
+
+/// How much of one unit another is worth.
+///
+/// Two kinds of row, distinguished by `foodId`:
+///   - global   (foodId null)  1 kg = 1000 g. True everywhere.
+///   - specific (foodId set)   1 katori of cooked rice = N g. True only for
+///                             that food, and sourced, never invented.
+///
+/// No food-specific conversion data is seeded. A household measure without a
+/// published reference is a guess, and guessing portion weights would put
+/// invented numbers underneath every future calculation.
+model UnitConversion {
+  id         String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  fromUnitId String @map("from_unit_id") @db.Uuid
+  toUnitId   String @map("to_unit_id") @db.Uuid
+
+  /// Null for a universal conversion; set when it holds only for one food.
+  foodId String? @map("food_id") @db.Uuid
+
+  /// value_in_to_unit = value_in_from_unit × factor.
+  factor Decimal @db.Decimal(16, 8)
+
+  /// Where the factor came from. Free text rather than a source FK because a
+  /// household portion may come from a guideline document rather than a
+  /// dataset — but it is never blank by accident.
+  sourceNote String? @map("source_note") @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  fromUnit Unit  @relation("ConversionFrom", fields: [fromUnitId], references: [id], onDelete: Restrict)
+  toUnit   Unit  @relation("ConversionTo", fields: [toUnitId], references: [id], onDelete: Restrict)
+  food     Food? @relation(fields: [foodId], references: [id], onDelete: Cascade)
+
+  @@unique([fromUnitId, toUnitId, foodId], map: "unit_conversions_unique")
+  @@index([foodId])
+  @@map("unit_conversions")
+}
+
+/// The manifest of one ingestion run.
+///
+/// Written before the work starts and updated when it ends, so a crashed import
+/// leaves a RUNNING row rather than no evidence at all. This is the
+/// reproducibility record: which file, which checksum, how many rows, what
+/// failed and why.
+///
+/// Counts here are always real. Nothing writes an expected or estimated figure.
+model DatasetImport {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  status DatasetImportStatus @default(RUNNING)
+
+  startedAt   DateTime  @default(now()) @map("started_at") @db.Timestamptz(6)
+  completedAt DateTime? @map("completed_at") @db.Timestamptz(6)
+
+  /// File name only, never an absolute path — a machine's directory layout is
+  /// not something to persist or leak.
+  inputFile     String? @map("input_file") @db.VarChar(300)
+  /// SHA-256 of the input. Two imports with the same checksum read identical
+  /// bytes, which is what makes a run reproducible after the fact.
+  inputChecksum String? @map("input_checksum") @db.VarChar(64)
+
+  recordsRead     Int @default(0) @map("records_read")
+  recordsImported Int @default(0) @map("records_imported")
+  recordsSkipped  Int @default(0) @map("records_skipped")
+  recordsFailed   Int @default(0) @map("records_failed")
+
+  /// Structured diagnostics, capped by the importer so one pathological file
+  /// cannot write an unbounded row.
+  warnings Json? @db.JsonB
+  errors   Json? @db.JsonB
+  /// Per-run detail: nutrient rows written, values missing, mappings needing
+  /// review. The data-quality report reads this.
+  metadata Json? @db.JsonB
+
+  /// Set when the run was started with --dry-run. A dry run reports exactly
+  /// what a real one would do and writes nothing but this manifest.
+  dryRun Boolean @default(false) @map("dry_run")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+
+  @@index([sourceVersionId, startedAt(sort: Desc)])
+  @@index([status])
+  @@map("dataset_imports")
+}

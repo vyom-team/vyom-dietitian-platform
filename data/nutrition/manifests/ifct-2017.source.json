@@ -1,0 +1,58 @@
+{
+  "source": "IFCT",
+  "dataset": "Indian Food Composition Tables",
+  "version": "2017",
+  "publisher": "ICMR-National Institute of Nutrition",
+  "country": "IN",
+  "sourceUrl": "https://www.nin.res.in/ebooks/IFCT2017.pdf",
+  "acquiredAt": "2026-08-18",
+  "acquiredBy": "manual download by project owner from the official ICMR-NIN website",
+  "filename": "raw/ifct/IFCT2017.pdf",
+  "sizeBytes": 12401190,
+  "sha256": "7fc5a5112a57240d25bf695dca82cccd8d93ed54e8c39530e42b5ad1820d0e8c",
+  "format": "PDF",
+  "pages": 585,
+
+  "machineReadableDataAvailable": false,
+  "machineReadableNote": "ICMR-NIN publishes IFCT 2017 as a book only. No CSV, XLSX, JSON, or API is offered on nin.res.in — ifct_book.html and IFCT_concisecopy.html link no data file. The domain ifct2017.com no longer belongs to the project and now redirects to unrelated commercial sites; it must not be used.",
+
+  "encryption": {
+    "encrypted": true,
+    "algorithm": "AES, V4/R4",
+    "opensWithEmptyUserPassword": true,
+    "permissionBits": 4294963908,
+    "permits": ["print"],
+    "denies": [
+      "copy / extract text",
+      "modify contents",
+      "annotate",
+      "fill forms",
+      "assemble",
+      "print high quality"
+    ],
+    "accessibilityExtraction": "allowed",
+    "note": "The publisher applied a technical protection measure that explicitly denies text extraction. The accessibility flag is a narrow carve-out for assistive technology serving a person with a disability; it is not a licence to bulk-harvest 585 pages of tables into a product database."
+  },
+
+  "licenseName": "UNKNOWN — no licence published",
+  "copyrightNotice": "ICMR-National Institute of Nutrition © 2018, All Rights Reserved. The site states: \"All rights reserved for this website. No part of this website may...\"",
+  "attributionRequired": true,
+
+  "developmentUsage": "READ_ONLY_REFERENCE",
+  "developmentUsageNote": "The document may be read by a person, and used to verify mappings or spot-check values obtained elsewhere. It is not a data source for automated extraction.",
+  "productionUsage": "PERMISSION_REQUIRED",
+  "commercialUsage": "PERMISSION_REQUIRED",
+  "permissionStatus": "PERMISSION_REQUIRED",
+
+  "acquisitionStatus": "ACQUIRED_REFERENCE_ONLY",
+  "importStatus": "NOT_IMPORTABLE",
+  "importBlocker": "The only official artefact is a copyrighted PDF whose owner permissions deny text extraction. Vyom will not circumvent that. Automated import requires either a dataset supplied by ICMR-NIN or written permission covering extraction and redistribution.",
+
+  "nextAction": "Request the underlying dataset and written permission from ICMR-NIN, covering (a) extraction of composition values, (b) storage in a database, (c) display to practitioners within a commercial SaaS product, and (d) required attribution wording.",
+
+  "notes": [
+    "File size and checksum match the official download exactly, so the copy held locally is authentic and unmodified.",
+    "A later revision exists at https://www.nin.res.in/ebooks/IFCT2017_16122024.pdf (12,405,852 bytes, dated 16-12-2024). Not acquired.",
+    "Third-party reproductions exist on GitHub, Kaggle, Scribd and academia.edu. None is authoritative and none may be used — see docs/nutrition-data.md."
+  ]
+}

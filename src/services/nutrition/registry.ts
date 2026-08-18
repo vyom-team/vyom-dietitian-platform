@@ -81,6 +81,7 @@ export async function syncNutritionRegistry(
         data: {
           code: definition.code,
           ...descriptive,
+          priority: definition.priority,
           commercialUseStatus: definition.commercialUseStatus,
           redistributionStatus: definition.redistributionStatus,
           permissionStatus: definition.permissionStatus,

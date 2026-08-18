@@ -243,3 +243,38 @@ export function parseDatasetManifest(
  * fixed.
  */
 export const DECIMAL_LITERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
+
+/**
+ * Food search query, as it arrives from the URL.
+ *
+ * `.catch()` on the coerced values clamps nonsense rather than erroring: a
+ * hand-edited `?page=abc` should show page one, not a crash.
+ */
+export const foodSearchQuerySchema = z.object({
+  q: z
+    .string()
+    .trim()
+    .max(120)
+    .optional()
+    .transform((value) => (value === "" ? undefined : value)),
+  category: z
+    .string()
+    .optional()
+    .transform((value) =>
+      value && (FOOD_CATEGORIES as readonly string[]).includes(value)
+        ? (value as (typeof FOOD_CATEGORIES)[number])
+        : undefined,
+    ),
+  source: z
+    .string()
+    .trim()
+    .max(40)
+    .optional()
+    .transform((value) => (value === "" || value === "all" ? undefined : value)),
+  page: z.coerce.number().int().min(1).catch(1),
+});
+
+export type FoodSearchQuery = z.output<typeof foodSearchQuerySchema>;
+
+/** Modest on purpose: nobody scans a hundred foods, and a big page is slow. */
+export const FOODS_PER_PAGE = 20;

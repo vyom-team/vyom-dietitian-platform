@@ -22,7 +22,16 @@ export default defineConfig({
      * validations/assessment.ts pulling in the BMI bounds — fails to resolve
      * without it.
      */
-    alias: { "@": resolve(import.meta.dirname, "src") },
+    alias: {
+      "@": resolve(import.meta.dirname, "src"),
+      /*
+       * `server-only` throws when resolved outside Next's server condition,
+       * which would make every service importing it impossible to test. The
+       * alias applies to the test run only — the real package still guards the
+       * application build.
+       */
+      "server-only": resolve(import.meta.dirname, "tests/helpers/server-only-stub.ts"),
+    },
   },
   test: {
     environment: "node",

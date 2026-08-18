@@ -10,7 +10,12 @@ import {
   type Diagnostic,
   type ImportStatistics,
   type NormalizedFood,
+  type RawRow,
 } from "@/lib/nutrition/ingest/types";
+import type {
+  NutrientColumnMapping,
+  NutritionSourceAdapter,
+} from "@/lib/nutrition/adapters/types";
 import type { DatasetManifest } from "@/validations/nutrition";
 
 import { ensureSourceVersion } from "./registry";
@@ -47,7 +52,17 @@ import { ensureSourceVersion } from "./registry";
  * the CLI and the tests.
  */
 
-const BATCH_SIZE = 200;
+const BATCH_SIZE = 100;
+
+/**
+ * Per-batch transaction budget.
+ *
+ * Generous because a batch does real work — a food with forty nutrients across
+ * a thousand records adds up — and because the alternative to waiting is a
+ * half-written batch. Prisma's 5 second default is tuned for request handling,
+ * not bulk ingestion.
+ */
+const TRANSACTION_TIMEOUT_MS = 120_000;
 
 export type ImportOptions = {
   prisma: PrismaClient;
@@ -179,11 +194,14 @@ export async function runDatasetImport(options: ImportOptions): Promise<ImportRe
     if (!dryRun) {
       for (let start = 0; start < records.length; start += BATCH_SIZE) {
         const batch = records.slice(start, start + BATCH_SIZE);
-        await prisma.$transaction(async (tx) => {
-          for (const record of batch) {
-            await writeRecord(tx, record, version.id, nutrientIds, statistics);
-          }
-        });
+        await prisma.$transaction(
+          async (tx) => {
+            for (const record of batch) {
+              await writeRecord(tx, record, version.id, nutrientIds, statistics);
+            }
+          },
+          { timeout: TRANSACTION_TIMEOUT_MS, maxWait: TRANSACTION_TIMEOUT_MS },
+        );
       }
 
       await prisma.nutritionSourceVersion.update({
@@ -267,9 +285,11 @@ async function writeRecord(
       where: { id: existing.id },
       data: {
         canonicalName: record.canonicalName,
+        normalizedName: record.normalizedName,
         description: record.description,
         category: record.category,
         foodType: record.foodType,
+        preparationState: record.preparationState,
       },
     });
     foodId = existing.id;
@@ -278,9 +298,11 @@ async function writeRecord(
     const created = await tx.food.create({
       data: {
         canonicalName: record.canonicalName,
+        normalizedName: record.normalizedName,
         description: record.description,
         category: record.category,
         foodType: record.foodType,
+        preparationState: record.preparationState,
         originSourceVersionId: sourceVersionId,
         originSourceFoodId: record.externalId,
       },
@@ -290,32 +312,60 @@ async function writeRecord(
     statistics.foodsCreated += 1;
   }
 
-  for (const alias of record.aliases) {
-    await tx.foodAlias.upsert({
-      where: { foodId_alias: { foodId, alias: alias.alias } },
-      create: {
+  /*
+   * Aliases, servings, and nutrient values are REPLACED for this source
+   * version rather than upserted one row at a time.
+   *
+   * Two reasons, and both matter. Correctness: a value the publisher removed in
+   * a later release should disappear, and row-by-row upserts would leave it
+   * behind forever. Practicality: a thousand records times forty nutrients is
+   * forty thousand round trips, which no sensible transaction budget survives.
+   *
+   * This is not "solving duplicates by deleting". The delete is scoped to one
+   * food and one source version, happens inside the same transaction as the
+   * insert, and touches no other source. Another release's values for the same
+   * food are untouched.
+   */
+  if (record.aliases.length > 0) {
+    await tx.foodAlias.deleteMany({ where: { foodId } });
+    await tx.foodAlias.createMany({
+      data: record.aliases.map((alias) => ({
         foodId,
         alias: alias.alias,
         languageCode: alias.languageCode,
         region: alias.region,
-      },
-      update: { languageCode: alias.languageCode, region: alias.region },
+      })),
     });
-    statistics.aliasesWritten += 1;
+    statistics.aliasesWritten += record.aliases.length;
   }
 
-  for (const value of record.nutrients) {
-    const nutrientId = nutrientIds.get(value.nutrientCode);
-    // The manifest schema already rejects unknown nutrient codes, so this can
-    // only mean the registry has not been synced. Skipping is safer than
-    // inventing a dictionary entry mid-import.
-    if (!nutrientId) continue;
+  if (record.servings.length > 0) {
+    await tx.foodServing.deleteMany({ where: { foodId, sourceVersionId } });
+    await tx.foodServing.createMany({
+      data: record.servings.map((serving) => ({
+        foodId,
+        sourceVersionId,
+        label: serving.label,
+        weightGrams: serving.weightGrams,
+        weightMethod: serving.weightMethod,
+        agreementSpread: serving.agreementSpread,
+        isDefault: serving.isDefault,
+      })),
+    });
+    statistics.servingsWritten += record.servings.length;
+    statistics.servingsWithoutWeight += record.servings.filter(
+      (serving) => serving.weightGrams === null,
+    ).length;
+  }
 
-    await tx.foodNutrient.upsert({
-      where: {
-        foodId_nutrientId_sourceVersionId: { foodId, nutrientId, sourceVersionId },
-      },
-      create: {
+  const values = record.nutrients.flatMap((value) => {
+    const nutrientId = nutrientIds.get(value.nutrientCode);
+    // Validation already rejects unknown nutrient codes, so this can only mean
+    // the registry has not been synced. Skipping is safer than inventing a
+    // dictionary entry mid-import.
+    if (!nutrientId) return [];
+    return [
+      {
         foodId,
         nutrientId,
         sourceVersionId,
@@ -325,15 +375,13 @@ async function writeRecord(
         basisUnitCode: value.basisUnitCode,
         sourceNutrientCode: value.sourceNutrientCode,
       },
-      update: {
-        value: value.value,
-        unit: value.unit,
-        basisQuantity: value.basisQuantity,
-        basisUnitCode: value.basisUnitCode,
-        sourceNutrientCode: value.sourceNutrientCode,
-      },
-    });
-    statistics.nutrientValuesWritten += 1;
+    ];
+  });
+
+  if (values.length > 0) {
+    await tx.foodNutrient.deleteMany({ where: { foodId, sourceVersionId } });
+    await tx.foodNutrient.createMany({ data: values });
+    statistics.nutrientValuesWritten += values.length;
   }
 
   /*
@@ -350,8 +398,9 @@ async function writeRecord(
       externalCategory: record.externalCategory,
       foodId,
       mappingStatus: "MAPPED",
-      // 1 exactly: the match is on the publisher's own identifier, which is
-      // certainty rather than similarity. Nothing here matches on names.
+      // The tie is the publisher's own identifier: certainty, not similarity.
+      // Nothing in this pipeline matches foods on names.
+      mappingMethod: "EXACT_SOURCE_ID",
       confidence: "1",
       rawPayload: record.raw,
     },
@@ -360,6 +409,7 @@ async function writeRecord(
       externalCategory: record.externalCategory,
       foodId,
       mappingStatus: "MAPPED",
+      mappingMethod: "EXACT_SOURCE_ID",
       confidence: "1",
       rawPayload: record.raw,
     },
@@ -401,4 +451,269 @@ async function finalise(
       metadata: { statistics },
     },
   });
+}
+
+// ---------------------------------------------------------------------------
+// Adapter-driven import
+// ---------------------------------------------------------------------------
+
+/**
+ * Imports a dataset through its source adapter.
+ *
+ * The manifest route above serves datasets that genuinely are one flat table of
+ * nutrient columns. Real publishers often are not: INDB carries every nutrient
+ * twice and leaves its serving weights implied. Rather than growing manifest
+ * syntax for each publisher's quirks, that knowledge lives in an adapter and
+ * everything from here down — provenance, idempotence, batching, reporting —
+ * stays identical for all of them.
+ *
+ * Records arrive already normalized, so this function is concerned only with
+ * writing them.
+ */
+export async function runAdapterImport(options: {
+  prisma: PrismaClient;
+  adapter: NutritionSourceAdapter;
+  /** Parsed rows and headers. Reading the file belongs to the caller. */
+  headers: readonly string[];
+  rows: readonly RawRow[];
+  version: string;
+  fileName: string;
+  /** SHA-256 of the source file, computed by whoever read it. */
+  checksum: string;
+  dryRun?: boolean;
+}): Promise<ImportResult> {
+  const { prisma, adapter, headers, rows, fileName, checksum } = options;
+  const dryRun = options.dryRun ?? false;
+  const startedAt = new Date();
+
+  const version = await ensureSourceVersion(prisma, adapter.sourceCode, options.version);
+
+  const importRecord = await prisma.datasetImport.create({
+    data: {
+      sourceVersionId: version.id,
+      status: "RUNNING",
+      inputFile: fileName,
+      inputChecksum: checksum,
+      dryRun,
+    },
+    select: { id: true },
+  });
+
+  const statistics = emptyStatistics();
+  const diagnostics: Diagnostic[] = [];
+
+  try {
+    const headerDiagnostics = adapter.validateHeaders(headers);
+    diagnostics.push(...headerDiagnostics);
+
+    if (headerDiagnostics.some((d) => d.severity === "error")) {
+      const completedAt = new Date();
+      await finalise(prisma, importRecord.id, "FAILED", statistics, diagnostics, completedAt);
+      return {
+        importId: importRecord.id,
+        status: "FAILED",
+        sourceName: version.sourceName,
+        checksum,
+        statistics,
+        diagnostics,
+        startedAt,
+        completedAt,
+      };
+    }
+
+    const nutrientIds = await loadNutrientIds(prisma);
+    const columnMappings = adapter.nutrientColumns(headers);
+
+    /*
+     * The column mapping is recorded before any row is written, so the mapping
+     * a run used survives even if the run later fails — and so a column the
+     * adapter cannot map appears as an UNMAPPED row rather than vanishing.
+     */
+    if (dryRun) {
+      statistics.unmappedNutrientColumns = columnMappings.filter(
+        (mapping) => mapping.nutrientCode === null,
+      ).length;
+    } else {
+      statistics.unmappedNutrientColumns = await recordNutrientMappings(
+        prisma,
+        version.id,
+        columnMappings,
+        nutrientIds,
+      );
+    }
+
+    const parsed = adapter.parse(rows, {
+      sourceCode: adapter.sourceCode,
+      version: options.version,
+    });
+    diagnostics.push(...parsed.diagnostics);
+
+    statistics.recordsRead = rows.length;
+    statistics.nutrientValuesMissing = parsed.diagnostics.filter(
+      (d) => d.code === "MISSING_NUTRIENT_VALUE",
+    ).length;
+    statistics.nutrientValuesInvalid = parsed.diagnostics.filter(
+      (d) =>
+        d.code === "INVALID_NUMBER" ||
+        d.code === "NEGATIVE_VALUE" ||
+        d.code === "VALUE_OUT_OF_RANGE",
+    ).length;
+    statistics.recordsInvalid = parsed.diagnostics.filter(
+      (d) => d.code === "MISSING_IDENTIFIER" || d.code === "MISSING_NAME",
+    ).length;
+
+    // Duplicate identifiers within one file: the first row wins, later ones are
+    // reported and skipped, so the import is not order-dependent.
+    const records: NormalizedFood[] = [];
+    const seen = new Set<string>();
+
+    for (const record of parsed.records) {
+      if (seen.has(record.externalId)) {
+        statistics.duplicateIdentifiers += 1;
+        statistics.recordsSkipped += 1;
+        diagnostics.push({
+          severity: "error",
+          code: "DUPLICATE_IDENTIFIER",
+          row: record.row,
+          externalId: record.externalId,
+          message:
+            `Identifier "${record.externalId}" already appeared in this file. ` +
+            "The later row was skipped; the two records must be reconciled at source.",
+        });
+        continue;
+      }
+      seen.add(record.externalId);
+      statistics.recordsValid += 1;
+      records.push(record);
+    }
+
+    if (dryRun) {
+      /*
+       * A dry run reports what a real one would do, so these are counted from
+       * the records in hand rather than left at zero — a report that says
+       * "0 values" for a run that would write 38,000 is worse than no report.
+       * Only created-versus-matched stays unknown, because that genuinely
+       * cannot be determined without touching the database.
+       */
+      statistics.recordsImported = records.length;
+      statistics.mappingsMapped = records.length;
+      statistics.nutrientValuesWritten = records.reduce(
+        (total, record) => total + record.nutrients.length,
+        0,
+      );
+      statistics.aliasesWritten = records.reduce(
+        (total, record) => total + record.aliases.length,
+        0,
+      );
+      statistics.servingsWritten = records.reduce(
+        (total, record) => total + record.servings.length,
+        0,
+      );
+      statistics.servingsWithoutWeight = records.reduce(
+        (total, record) =>
+          total + record.servings.filter((serving) => serving.weightGrams === null).length,
+        0,
+      );
+    } else {
+      for (let start = 0; start < records.length; start += BATCH_SIZE) {
+        const batch = records.slice(start, start + BATCH_SIZE);
+        await prisma.$transaction(
+          async (tx) => {
+            for (const record of batch) {
+              await writeRecord(tx, record, version.id, nutrientIds, statistics);
+            }
+          },
+          { timeout: TRANSACTION_TIMEOUT_MS, maxWait: TRANSACTION_TIMEOUT_MS },
+        );
+      }
+
+      await prisma.nutritionSourceVersion.update({
+        where: { id: version.id },
+        data: { importedAt: new Date() },
+      });
+    }
+
+    const hasErrors = diagnostics.some((d) => d.severity === "error");
+    const status: DatasetImportStatus =
+      statistics.recordsValid === 0 && statistics.recordsRead > 0
+        ? "FAILED"
+        : hasErrors
+          ? "PARTIAL"
+          : "COMPLETED";
+
+    const completedAt = new Date();
+    await finalise(prisma, importRecord.id, status, statistics, diagnostics, completedAt);
+
+    return {
+      importId: importRecord.id,
+      status,
+      sourceName: version.sourceName,
+      checksum,
+      statistics,
+      diagnostics,
+      startedAt,
+      completedAt,
+    };
+  } catch (error) {
+    const completedAt = new Date();
+    diagnostics.push({
+      severity: "error",
+      code: "INVALID_NUMBER",
+      row: 0,
+      message: `Import aborted: ${error instanceof Error ? error.message : String(error)}`,
+    });
+    await finalise(prisma, importRecord.id, "FAILED", statistics, diagnostics, completedAt);
+    throw error;
+  }
+}
+
+/**
+ * Writes the adapter's column mapping for this release.
+ *
+ * An unmapped column is stored, not skipped: a nutrient the source publishes
+ * and Vyom has no home for is a gap worth seeing when someone later asks why a
+ * value is missing.
+ *
+ * @returns how many columns could not be mapped.
+ */
+async function recordNutrientMappings(
+  prisma: PrismaClient,
+  sourceVersionId: string,
+  mappings: readonly NutrientColumnMapping[],
+  nutrientIds: ReadonlyMap<string, string>,
+): Promise<number> {
+  let unmapped = 0;
+
+  for (const mapping of mappings) {
+    const nutrientId = mapping.nutrientCode
+      ? (nutrientIds.get(mapping.nutrientCode) ?? null)
+      : null;
+
+    if (!nutrientId) unmapped += 1;
+
+    await prisma.sourceNutrientMapping.upsert({
+      where: {
+        sourceVersionId_sourceNutrientCode: {
+          sourceVersionId,
+          sourceNutrientCode: mapping.sourceColumn,
+        },
+      },
+      create: {
+        sourceVersionId,
+        sourceNutrientCode: mapping.sourceColumn,
+        sourceUnit: mapping.sourceUnit,
+        nutrientId,
+        status: nutrientId ? "MAPPED" : "UNMAPPED",
+        notes: mapping.notes ?? null,
+      },
+      update: {
+        sourceUnit: mapping.sourceUnit,
+        nutrientId,
+        status: nutrientId ? "MAPPED" : "UNMAPPED",
+        notes: mapping.notes ?? null,
+      },
+    });
+  }
+
+  return unmapped;
 }

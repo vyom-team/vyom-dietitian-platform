@@ -37,10 +37,15 @@ const READABLE = [
   "food_nutrients",
   "units",
   "unit_conversions",
+  "food_servings",
 ] as const;
 
 /** Tables the browser may not touch at all. */
-const INTERNAL = ["source_foods", "dataset_imports"] as const;
+const INTERNAL = [
+  "source_foods",
+  "dataset_imports",
+  "source_nutrient_mappings",
+] as const;
 
 const ALL_TABLES = [...READABLE, ...INTERNAL];
 
@@ -231,6 +236,12 @@ async function main() {
     "unit_conversions_distinct_units",
     "dataset_imports_counts_non_negative",
     "dataset_imports_completed_at_matches_status",
+    "foods_normalized_name_not_blank",
+    "food_servings_label_not_blank",
+    "food_servings_weight_positive",
+    "food_servings_weight_matches_method",
+    "food_servings_spread_only_when_derived",
+    "source_nutrient_mappings_status_matches_nutrient",
   ]) {
     check(`CHECK ${name}`, constraintNames.has(name));
   }
@@ -265,6 +276,20 @@ async function main() {
 
   const factor = column("unit_conversions", "factor");
   check("unit_conversions.factor is NUMERIC", factor?.data_type === "numeric");
+
+  const normalized = column("foods", "normalized_name");
+  check(
+    "foods.normalized_name is NOT NULL (search has something to match)",
+    normalized?.is_nullable === "NO",
+  );
+
+  const servingWeight = column("food_servings", "weight_grams");
+  check("food_servings.weight_grams is NUMERIC", servingWeight?.data_type === "numeric");
+  // Nullable on purpose: a named portion whose weight is unknown is honest.
+  check(
+    "food_servings.weight_grams is nullable (unknown weight stays unknown)",
+    servingWeight?.is_nullable === "YES",
+  );
 
   const sourceVersion = column("food_nutrients", "source_version_id");
   check(
@@ -303,6 +328,13 @@ async function main() {
   check(
     "unit_conversions_global_unique is partial on food_id IS NULL",
     Boolean(indexMap.get("unit_conversions_global_unique")?.includes("food_id IS NULL")),
+  );
+  // Search always goes through the normalised name, so it must be indexed.
+  check("foods_normalized_name_idx exists", indexMap.has("foods_normalized_name_idx"));
+  check("foods_preparation_state_idx exists", indexMap.has("foods_preparation_state_idx"));
+  check(
+    "food_servings uniqueness spans food + version + label",
+    indexMap.has("food_servings_food_id_source_version_id_label_key"),
   );
 
   // --- Earlier phases still intact -----------------------------------------

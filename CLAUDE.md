@@ -25,18 +25,23 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 8A — Nutrition Data Foundation`
+**Current phase:** `PHASE 8B — Food Database Ingestion`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
 access control and Row Level Security (3), practice onboarding (4), team and
 staff management with invitations (5), the client management foundation (6),
-the nutrition assessment foundation (7), and the nutrition data and
-dataset-ingestion foundation (8A).
+the nutrition assessment foundation (7), the nutrition data foundation
+(8A), and dataset ingestion with a real Indian food database (8B).
 
 Still absent by design: the nutrition calculation engine, meal plans, recipes,
 the food database UI, progress tracking, client portal, and billing. The Client
 model holds no clinical data — that lives on NutritionAssessment.
+
+**The food database holds real data.** 1,014 Indian recipes from INDB 2024.11,
+with serving sizes. IFCT is held as a PDF only — ICMR-NIN denies text
+extraction, so it is a reference document a person reads, never an import
+source. See `data/nutrition/README.md`.
 
 **Nutrition reference data is global, not tenant-owned.** Foods, nutrients, and
 their values belong to no organization: readable by any clinical user of any

@@ -178,6 +178,127 @@ production use.
 
 ---
 
+## Source adapters
+
+Two routes in, and the difference matters.
+
+**Manifests** serve datasets that genuinely are one flat table of nutrient
+columns. **Adapters** serve the ones that are not.
+
+INDB publishes every nutrient twice — per 100 g and per serving — and names its
+portions without stating what they weigh. Expressing that in manifest syntax
+would have meant inventing manifest features for one publisher's layout, and the
+next publisher would need different ones. So source-specific knowledge lives in
+an adapter, and everything downstream — validation, provenance, idempotence,
+batching, reporting — stays identical for every source.
+
+```
+IFCT rows  -+
+INDB rows  -+-> adapter -> NormalizedFood[] -> validate -> database
+USDA rows  -+
+```
+
+Adapters are **pure**: rows in, records out. They do not read files, touch the
+database, or log — which is what makes them testable against a handful of
+fixture rows instead of a 12 MB download. File reading lives in `scripts/`, so
+the spreadsheet dependency can never reach a browser bundle.
+
+| Source | Adapter | Why |
+|---|---|---|
+| INDB | yes — `src/lib/nutrition/adapters/indb.ts` | File inspected, columns known |
+| IFCT | no | No file — the PDF denies text extraction |
+| USDA | no | Arrives with the download, once its schema is inspected |
+
+An adapter is written **only after a real file has been inspected**. Writing one
+against a dataset nobody has opened means guessing column names, nutrient
+meanings, and units — which fails loudly at best and imports subtly wrong
+nutrition at worst.
+
+### Recorded column mapping
+
+Every adapter declares its columns up front, and they are written to
+`source_nutrient_mappings` **before any row is processed** — so the mapping a run
+used survives even if the run later fails.
+
+A column the adapter cannot map is stored as `UNMAPPED` with the reason, not
+dropped. INDB's `vitb9_ug` is the worked example: B9 is folate, which INDB also
+publishes as `folate_ug`. Mapping both would write one nutrient twice, and
+picking one silently would hide any disagreement between them.
+
+---
+
+## Serving sizes
+
+The table that makes the food database usable by a practitioner. A dietitian
+records "one bowl of khichdi", not "574 grams of khichdi", and a client logging
+a meal certainly does not weigh it.
+
+### Weights are never invented — but they can be recovered
+
+Phase 8A deliberately seeded no household conversion, because an unsourced
+"1 cup of rice = N g" is a fabricated number underneath every later calculation.
+That still holds.
+
+INDB, however, publishes every nutrient twice. Each pair independently implies a
+weight:
+
+```
+grams = per_serving / per_100g * 100
+```
+
+With 39 nutrient pairs per row, there are 39 independent estimates of the same
+number. Across the release **every row agreed to 0.000%**. A number the source
+committed to 39 times over is not a guess — and unlike a guess, every step is
+reproducible from the file.
+
+So each serving records **how** its weight was established:
+
+| `weightMethod` | Meaning |
+|---|---|
+| `PUBLISHED` | The source stated it outright |
+| `DERIVED_FROM_SOURCE` | Recovered from the source's own arithmetic, with `agreementSpread` recording how firmly |
+| `UNKNOWN` | Named portion, no weight — `weightGrams` is null |
+
+A row whose nutrients disagree beyond 0.5% gets **no weight at all** rather than
+an averaged one. A database CHECK enforces that a weight and its method travel
+together, so "we do not know what a bowl weighs" and "a bowl weighs 173 g" can
+never become indistinguishable.
+
+---
+
+## Names and search
+
+Real dataset names look like this:
+
+> `Plain khitchdi (Plain khichri/khichdi)` and `Hot tea (Garam Chai)`
+
+A dietitian types "khichdi" or "chai". Matching the published string fails,
+because the word is behind a bracket and a slash.
+
+So a food carries two names. `canonicalName` is what the source published,
+never altered — which is what keeps the record verifiable against the printed
+table. `normalizedName` is the flattened comparison form, and search matches
+only against that.
+
+**No aliases are created from parentheticals.** "(Garam Chai)" is an alternative
+name and "(with semolina)" is a qualifier, and no reliable rule separates them.
+Guessing would invent aliases; instead the bracketed words land in the
+normalized form, so search finds them without an unverified alias row existing.
+
+Normalization keeps letters, **combining marks**, and digits from every script.
+The combining marks are easy to overlook and not optional: Indic vowel signs are
+marks rather than letters, so a filter without them turns "दाल" into "द ल" and
+makes every Devanagari name unfindable. A test covers it.
+
+Search is server-side, paginated, and ordered deterministically by name then id
+— without the id tiebreak, two foods sharing a name could swap places between
+pages, showing one twice and another never. Matching is `AND` across words and
+`OR` across fields, so a second word narrows rather than widens. Nothing is
+fuzzy or phonetic: "dal" and "daal" are different strings, and guessing between
+them is how a plan gets built on the wrong food.
+
+---
+
 ## Ingestion
 
 ### Manifests
@@ -228,11 +349,19 @@ refused by the schema, and containment is re-checked when the path is resolved.
 ### Running an import
 
 ```bash
-npm run nutrition:registry                              # sources, nutrients, units
-npm run nutrition:import -- --manifest ifct-2017.json --dry-run
-npm run nutrition:import -- --manifest ifct-2017.json
-npm run nutrition:report                                # data quality
-npm run nutrition:verify                                # security assertions
+npm run nutrition:registry          # sources, nutrients, units — no values
+
+# adapter route, for datasets with real structure
+npm run nutrition:import-source -- --source INDB --version 2024.11 \
+    --file raw/indb/Anuvaad_INDB_2024.11.xlsx --dry-run
+npm run nutrition:import-source -- --source INDB --version 2024.11 \
+    --file raw/indb/Anuvaad_INDB_2024.11.xlsx
+
+# manifest route, for flat nutrient tables
+npm run nutrition:import -- --manifest <file>.json --dry-run
+
+npm run nutrition:report            # data quality
+npm run nutrition:verify            # security assertions
 ```
 
 Both the manifest and its data file live in `NUTRITION_DATA_DIR` (default
@@ -247,17 +376,23 @@ outcome, not a success, or CI would treat a half-imported dataset as fine.
 
 ### Idempotence
 
-Running the same import twice produces the same database, not two copies. Every
-write is keyed on something the publisher supplies:
+Running the same import twice produces the same database, not two copies. Foods
+and source records are keyed on the publisher's own identifier:
 
 | Entity | Key |
 |---|---|
 | Food | (source version, publisher's food id) |
-| Nutrient value | (food, nutrient, source version) |
-| Alias | (food, alias text) |
 | Source food | (source version, publisher's food id) |
 
-Nothing is deduplicated by deleting. A re-run matches and updates.
+Nutrient values, servings, and aliases are **replaced** for that food and source
+version, inside the same transaction that rewrites them. Two reasons, and both
+matter: a value the publisher removed in a later release should disappear, which
+row-by-row upserts would never do; and a thousand records times forty nutrients
+is forty thousand round trips, which no sensible transaction budget survives.
+
+This is not "solving duplicates by deleting". The delete is scoped to one food
+and one source version and touches no other source — another release's values
+for the same food are untouched.
 
 The same identifier appearing twice **within one file** is a different problem:
 the first row wins, the second is skipped and reported. Silently letting the

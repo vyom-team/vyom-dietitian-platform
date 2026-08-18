@@ -1,6 +1,8 @@
 import type { FoodCategory, FoodType } from "@/generated/prisma/enums";
 import { DECIMAL_LITERAL, type DatasetManifest } from "@/validations/nutrition";
 
+import { normalizeFoodName } from "../normalize-name";
+
 import type {
   Diagnostic,
   NormalizeResult,
@@ -174,11 +176,16 @@ export function normalizeRow(
       // regional variants, choosing a house style — is a human task, and this
       // phase deliberately does not guess at it.
       canonicalName: externalName,
+      normalizedName: normalizeFoodName(externalName),
       description: description === "" ? null : description,
       category,
       foodType,
+      // The manifest route has no preparation column. A source that
+      // distinguishes raw from cooked is handled by its own adapter.
+      preparationState: "UNKNOWN",
       aliases,
       nutrients,
+      servings: [],
       raw,
       row,
     },

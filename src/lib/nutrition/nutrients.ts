@@ -17,9 +17,17 @@
  * when the two disagree.
  *
  * The list covers the macronutrients and the fifteen micronutrients Vyom tracks
- * (see CLAUDE.md). It is a superset of what any one phase exposes — deciding
- * which nutrients appear in the UI is a later product decision, and the
- * dictionary should not have to change when it is made.
+ * (see CLAUDE.md), plus the further nutrients the Indian datasets actually
+ * publish — fat fractions, trace minerals, and the vitamin fractions a source
+ * reports separately.
+ *
+ * It is a superset of what any one phase exposes. Deciding which nutrients
+ * appear in the UI is a later product decision, and the dictionary should not
+ * have to change when it is made.
+ *
+ * Where a source reports fractions rather than a total (vitamin D2 and D3, K1
+ * and K2), each fraction gets its own code and nothing sums them. A total is a
+ * calculation, and this file stores no derived value.
  */
 
 import type { NutrientCategory, NutrientUnit } from "@/generated/prisma/enums";
@@ -78,6 +86,30 @@ export const NUTRIENT_DEFINITIONS: readonly NutrientDefinition[] = [
     category: "MACRONUTRIENT",
     unit: "G",
   },
+  { code: "SUGARS", name: "Free sugars", category: "MACRONUTRIENT", unit: "G" },
+
+  // Fat fractions. Declared in milligrams because that is the unit the Indian
+  // datasets publish them in. Declaring them in grams would force a conversion
+  // on every import, and Vyom does not convert units during ingestion.
+  {
+    code: "SATURATED_FAT",
+    name: "Saturated fatty acids",
+    category: "MACRONUTRIENT",
+    unit: "MG",
+  },
+  {
+    code: "MUFA",
+    name: "Monounsaturated fatty acids",
+    category: "MACRONUTRIENT",
+    unit: "MG",
+  },
+  {
+    code: "PUFA",
+    name: "Polyunsaturated fatty acids",
+    category: "MACRONUTRIENT",
+    unit: "MG",
+  },
+  { code: "CHOLESTEROL", name: "Cholesterol", category: "OTHER", unit: "MG" },
 
   // --- Minerals -------------------------------------------------------------
   { code: "CALCIUM", name: "Calcium", category: "MINERAL", unit: "MG" },
@@ -86,6 +118,12 @@ export const NUTRIENT_DEFINITIONS: readonly NutrientDefinition[] = [
   { code: "MAGNESIUM", name: "Magnesium", category: "MINERAL", unit: "MG" },
   { code: "SODIUM", name: "Sodium", category: "MINERAL", unit: "MG" },
   { code: "POTASSIUM", name: "Potassium", category: "MINERAL", unit: "MG" },
+  { code: "PHOSPHORUS", name: "Phosphorus", category: "MINERAL", unit: "MG" },
+  { code: "COPPER", name: "Copper", category: "MINERAL", unit: "MG" },
+  { code: "SELENIUM", name: "Selenium", category: "MINERAL", unit: "UG" },
+  { code: "CHROMIUM", name: "Chromium", category: "MINERAL", unit: "MG" },
+  { code: "MANGANESE", name: "Manganese", category: "MINERAL", unit: "MG" },
+  { code: "MOLYBDENUM", name: "Molybdenum", category: "MINERAL", unit: "MG" },
 
   // --- Vitamins -------------------------------------------------------------
   {
@@ -107,8 +145,28 @@ export const NUTRIENT_DEFINITIONS: readonly NutrientDefinition[] = [
   { code: "VITAMIN_B6", name: "Vitamin B6", category: "VITAMIN", unit: "MG" },
   { code: "VITAMIN_B12", name: "Vitamin B12", category: "VITAMIN", unit: "UG" },
   { code: "VITAMIN_C", name: "Vitamin C", category: "VITAMIN", unit: "MG" },
-  { code: "VITAMIN_D", name: "Vitamin D", category: "VITAMIN", unit: "UG" },
+  {
+    code: "VITAMIN_D",
+    name: "Vitamin D",
+    category: "VITAMIN",
+    unit: "UG",
+    description:
+      "Total vitamin D. A source publishing D2 and D3 separately maps to those codes instead — summing them would be a calculation, and this file stores no derived value.",
+  },
+  { code: "VITAMIN_D2", name: "Vitamin D2 (ergocalciferol)", category: "VITAMIN", unit: "UG" },
+  { code: "VITAMIN_D3", name: "Vitamin D3 (cholecalciferol)", category: "VITAMIN", unit: "UG" },
+  { code: "VITAMIN_E", name: "Vitamin E", category: "VITAMIN", unit: "MG" },
+  { code: "VITAMIN_K1", name: "Vitamin K1 (phylloquinone)", category: "VITAMIN", unit: "UG" },
+  { code: "VITAMIN_K2", name: "Vitamin K2 (menaquinone)", category: "VITAMIN", unit: "UG" },
+  { code: "VITAMIN_B5", name: "Pantothenic acid (B5)", category: "VITAMIN", unit: "MG" },
+  { code: "VITAMIN_B7", name: "Biotin (B7)", category: "VITAMIN", unit: "UG" },
   { code: "FOLATE", name: "Folate", category: "VITAMIN", unit: "UG" },
+  {
+    code: "CAROTENOIDS",
+    name: "Total carotenoids",
+    category: "OTHER",
+    unit: "UG",
+  },
 ] as const;
 
 /** Lookup by code, for validating a manifest's nutrient mappings. */

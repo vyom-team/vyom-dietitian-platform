@@ -1,4 +1,10 @@
-import type { FoodCategory, FoodType, NutrientUnit } from "@/generated/prisma/enums";
+import type {
+  FoodCategory,
+  FoodType,
+  NutrientUnit,
+  PreparationState,
+  ServingWeightMethod,
+} from "@/generated/prisma/enums";
 
 /**
  * The shapes that move through the ingestion pipeline.
@@ -39,7 +45,10 @@ export type DiagnosticCode =
   | "VALUE_OUT_OF_RANGE"
   | "MISSING_NUTRIENT_VALUE"
   | "NO_NUTRIENT_VALUES"
-  | "UNKNOWN_NUTRIENT";
+  | "UNKNOWN_NUTRIENT"
+  | "UNMAPPED_NUTRIENT"
+  | "SERVING_WEIGHT_INCONSISTENT"
+  | "SERVING_WEIGHT_UNKNOWN";
 
 export type Diagnostic = {
   severity: "error" | "warning";
@@ -84,15 +93,45 @@ export type NormalizedFood = {
   externalId: string;
   externalName: string;
   externalCategory: string | null;
+  /** The published name, unaltered. */
   canonicalName: string;
+  /** The comparison form search matches against. Never shown to anyone. */
+  normalizedName: string;
   description: string | null;
   category: FoodCategory;
   foodType: FoodType;
+  /**
+   * UNKNOWN unless the source actually says. Rice raw and rice cooked differ
+   * in energy by roughly a factor of three, so this is never guessed.
+   */
+  preparationState: PreparationState;
   aliases: readonly NormalizedAlias[];
   nutrients: readonly NormalizedNutrientValue[];
+  /** Named portions the source described, with weights where known. */
+  servings: readonly NormalizedServing[];
   /** The original row, preserved for the audit trail. */
   raw: RawRow;
   row: number;
+};
+
+/**
+ * A named portion — "1 bowl", "1 plate".
+ *
+ * `weightGrams` is null when the source named a portion without a usable
+ * weight, which is honest rather than unhelpful. It is never filled in with a
+ * plausible figure: an unsourced portion weight would put an invented number
+ * underneath every calculation built on top of it.
+ */
+export type NormalizedServing = {
+  label: string;
+  weightGrams: string | null;
+  weightMethod: ServingWeightMethod;
+  /**
+   * For a derived weight, how far the nutrients used to recover it disagreed,
+   * as a fraction. Recorded so the derivation stays checkable.
+   */
+  agreementSpread: string | null;
+  isDefault: boolean;
 };
 
 export type NormalizedAlias = {
@@ -135,8 +174,13 @@ export type ImportStatistics = {
   nutrientValuesMissing: number;
   nutrientValuesInvalid: number;
   aliasesWritten: number;
+  servingsWritten: number;
+  /** Portions named by the source whose weight could not be established. */
+  servingsWithoutWeight: number;
   mappingsMapped: number;
   mappingsNeedingReview: number;
+  /** Source nutrient columns Vyom has no nutrient for. Visible, not dropped. */
+  unmappedNutrientColumns: number;
 };
 
 export function emptyStatistics(): ImportStatistics {
@@ -153,7 +197,10 @@ export function emptyStatistics(): ImportStatistics {
     nutrientValuesMissing: 0,
     nutrientValuesInvalid: 0,
     aliasesWritten: 0,
+    servingsWritten: 0,
+    servingsWithoutWeight: 0,
     mappingsMapped: 0,
     mappingsNeedingReview: 0,
+    unmappedNutrientColumns: 0,
   };
 }

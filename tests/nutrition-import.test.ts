@@ -602,7 +602,12 @@ describe.skipIf(!enabled)("database constraints", () => {
   it("refuses a blank canonical name", async () => {
     await expect(
       prisma.food.create({
-        data: { canonicalName: "   ", category: "OTHER", foodType: "RAW" },
+        data: {
+          canonicalName: "   ",
+          normalizedName: "blank",
+          category: "OTHER",
+          foodType: "RAW",
+        },
       }),
     ).rejects.toThrow();
   });
@@ -613,6 +618,7 @@ describe.skipIf(!enabled)("database constraints", () => {
       prisma.food.create({
         data: {
           canonicalName: `${run} orphan`,
+          normalizedName: `${run} orphan`,
           category: "OTHER",
           foodType: "RAW",
           originSourceFoodId: "X1",

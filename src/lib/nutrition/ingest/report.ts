@@ -64,6 +64,10 @@ export function formatImportReport(input: ReportInput): string {
   lines.push(`    Created         ${count(stats.foodsCreated)}`);
   lines.push(`    Matched         ${count(stats.foodsUpdated)}`);
   lines.push(`    Aliases         ${count(stats.aliasesWritten)}`);
+  lines.push(`    Servings        ${count(stats.servingsWritten)}`);
+  lines.push(
+    `    ...no weight    ${count(stats.servingsWithoutWeight)}   (portion named, weight not established — never guessed)`,
+  );
 
   lines.push("");
   lines.push("  Nutrient values");
@@ -78,6 +82,9 @@ export function formatImportReport(input: ReportInput): string {
   lines.push("  Source mapping");
   lines.push(`    Mapped          ${count(stats.mappingsMapped)}`);
   lines.push(`    Needs review    ${count(stats.mappingsNeedingReview)}`);
+  lines.push(
+    `    Unmapped cols   ${count(stats.unmappedNutrientColumns)}   (source nutrients Vyom has no home for — recorded, not dropped)`,
+  );
 
   lines.push("");
   lines.push(`  Errors            ${count(errors.length)}`);

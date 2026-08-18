@@ -26,6 +26,7 @@ import type {
   DataUseStatus,
   NutritionSourceStatus,
   SourcePermissionStatus,
+  SourcePriority,
 } from "@/generated/prisma/enums";
 
 export type SourceDefinition = {
@@ -45,6 +46,14 @@ export type SourceDefinition = {
   attributionRequired: boolean;
   status: NutritionSourceStatus;
   /**
+   * Which source a later engine should prefer when two disagree.
+   *
+   * Recorded as data rather than hard-coded across the codebase, and it never
+   * causes a value to be deleted or overwritten — every source stays queryable
+   * with its own provenance.
+   */
+  priority: SourcePriority;
+  /**
    * What still has to happen before this source could be used in production.
    * Written to the source's metadata so it travels with the row.
    */
@@ -54,6 +63,7 @@ export type SourceDefinition = {
 export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
   {
     code: "IFCT",
+    priority: "PRIMARY_INDIAN",
     name: "Indian Food Composition Tables",
     organization: "ICMR-National Institute of Nutrition",
     country: "IN",
@@ -69,6 +79,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
   },
   {
     code: "INDB",
+    priority: "SECONDARY_INDIAN",
     name: "Indian Nutrient Databank",
     country: "IN",
     description:
@@ -83,6 +94,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
   },
   {
     code: "ICMR_NIN_RDA",
+    priority: "PRIMARY_INDIAN",
     name: "ICMR-NIN Recommended Dietary Allowances and Estimated Average Requirements",
     organization: "ICMR-National Institute of Nutrition",
     country: "IN",
@@ -98,6 +110,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
   },
   {
     code: "ICMR_NIN_DG",
+    priority: "PRIMARY_INDIAN",
     name: "ICMR-NIN Dietary Guidelines for Indians",
     organization: "ICMR-National Institute of Nutrition",
     country: "IN",
@@ -113,6 +126,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
   },
   {
     code: "USDA_FDC",
+    priority: "SUPPLEMENTARY_INTERNATIONAL",
     name: "USDA FoodData Central",
     organization: "United States Department of Agriculture",
     country: "US",

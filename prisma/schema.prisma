@@ -828,6 +828,11 @@ model NutritionSource {
 
   status NutritionSourceStatus @default(ACTIVE)
 
+  /// Which source a later engine should prefer when two disagree. Recorded
+  /// here rather than hard-coded across the codebase, and it never causes a
+  /// value to be deleted or overwritten — every source stays queryable.
+  priority SourcePriority @default(SUPPLEMENTARY_INTERNATIONAL)
+
   /// Free-form provenance that does not deserve a column — contact details,
   /// review notes, correspondence references.
   metadata Json? @db.JsonB
@@ -868,10 +873,12 @@ model NutritionSourceVersion {
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
   source          NutritionSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
-  foodNutrients   FoodNutrient[]
-  sourceFoods     SourceFood[]
-  imports         DatasetImport[]
-  foodsOriginated Food[]          @relation("FoodOriginVersion")
+  foodNutrients    FoodNutrient[]
+  sourceFoods      SourceFood[]
+  imports          DatasetImport[]
+  foodsOriginated  Food[]                  @relation("FoodOriginVersion")
+  servings         FoodServing[]
+  nutrientMappings SourceNutrientMapping[]
 
   /// One row per release of a source. This pair is also the natural key the
   /// importer resolves from configuration.
@@ -908,7 +915,8 @@ model Nutrient {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  foodNutrients FoodNutrient[]
+  foodNutrients   FoodNutrient[]
+  sourceMappings  SourceNutrientMapping[]
 
   @@index([category, displayOrder])
   @@map("nutrients")
@@ -926,12 +934,25 @@ model Nutrient {
 model Food {
   id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
 
-  /// The name a practitioner sees. Regional and alternate names are aliases.
+  /// The name a practitioner sees, exactly as the source published it.
+  /// Never rewritten by an importer — see normalizedName for the search form.
   canonicalName String  @map("canonical_name") @db.VarChar(200)
+
+  /// The comparison form: Unicode-normalised, case-folded, punctuation and
+  /// bracketed alternatives flattened. Search matches on this so that
+  /// "Plain khitchdi (Plain khichri/khichdi)" is findable by typing "khichdi",
+  /// while the published name survives untouched for display.
+  normalizedName String @map("normalized_name") @db.VarChar(300)
+
   description   String? @db.Text
 
   category FoodCategory
   foodType FoodType     @map("food_type")
+
+  /// Kept separate from foodType. Rice raw and rice cooked share a category
+  /// and a type, and differ in energy by roughly a factor of three.
+  /// UNKNOWN where the source does not say — never guessed.
+  preparationState PreparationState @default(UNKNOWN) @map("preparation_state")
 
   /// Which dataset release this canonical record was first derived from.
   /// Provenance, not authority — a food may later carry values from several
@@ -955,12 +976,16 @@ model Food {
   aliases             FoodAlias[]
   sourceFoods         SourceFood[]
   unitConversions     UnitConversion[]
+  servings            FoodServing[]
 
   /// Idempotency key for imports. Re-running an import finds the food it
   /// created last time instead of inserting a second copy.
   @@unique([originSourceVersionId, originSourceFoodId], map: "foods_origin_unique")
   @@index([category, isActive])
   @@index([canonicalName])
+  /// The search index. Name lookup always goes through the normalised form.
+  @@index([normalizedName])
+  @@index([preparationState])
   @@map("foods")
 }
 
@@ -1072,6 +1097,9 @@ model SourceFood {
   foodId String? @map("food_id") @db.Uuid
 
   mappingStatus SourceFoodMappingStatus @default(UNMAPPED) @map("mapping_status")
+  /// How the tie was made. Auditable after the fact, and deliberately without
+  /// any value meaning "matched because the names looked alike".
+  mappingMethod MappingMethod?          @map("mapping_method")
   /// 0–1, how certain the deterministic match was. Recorded for review
   /// ordering; nothing acts on it automatically.
   confidence    Decimal?                @db.Decimal(4, 3)
@@ -1217,4 +1245,177 @@ model DatasetImport {
   @@index([sourceVersionId, startedAt(sort: Desc)])
   @@index([status])
   @@map("dataset_imports")
+}
+
+// ---------------------------------------------------------------------------
+// Phase 8B — dataset ingestion
+//
+// Adds what real datasets turned out to need: a separate preparation state, a
+// searchable name distinct from the published one, serving sizes, and a
+// recorded nutrient mapping per source release.
+// ---------------------------------------------------------------------------
+
+/// How a food was prepared, kept **separate** from FoodType.
+///
+/// FoodType says what kind of item it is; this says what was done to it. Rice
+/// raw and rice cooked are the same category and the same type, and their
+/// nutrition differs by a factor of roughly three — merging them would produce
+/// meal plans that are wrong by that much.
+///
+/// UNKNOWN is common and honest: a source that does not publish preparation
+/// state gets UNKNOWN, never a guess.
+enum PreparationState {
+  RAW
+  COOKED
+  UNKNOWN
+
+  @@map("preparation_state")
+}
+
+/// Where a source sits in the precedence order.
+///
+/// Configuration, not behaviour. Nothing in Phase 8B acts on it, and no source
+/// is ever deleted or overwritten because another outranks it — every value
+/// stays queryable with its own provenance. It records which source a later
+/// engine should *prefer* when two disagree.
+enum SourcePriority {
+  PRIMARY_INDIAN
+  SECONDARY_INDIAN
+  SUPPLEMENTARY_INTERNATIONAL
+
+  @@map("source_priority")
+}
+
+/// How an external record was tied to a canonical food.
+///
+/// Recorded so a mapping can be audited later. There is deliberately no
+/// FUZZY_NAME or AI value: nothing in this codebase matches foods by name
+/// similarity, and no enum value should suggest otherwise.
+enum MappingMethod {
+  /// The publisher's own record id. Certainty, not similarity.
+  EXACT_SOURCE_ID
+  /// A human-written mapping in configuration.
+  CONFIGURED
+  /// Entered by a person.
+  MANUAL
+  /// Parked for review.
+  REVIEW_REQUIRED
+
+  @@map("mapping_method")
+}
+
+/// Whether a source's nutrient column reached a Vyom nutrient.
+enum NutrientMappingStatus {
+  MAPPED
+  /// The source publishes it and Vyom has no nutrient for it. The column is
+  /// recorded rather than dropped, so the gap is visible.
+  UNMAPPED
+  REVIEW_REQUIRED
+
+  @@map("nutrient_mapping_status")
+}
+
+/// How a serving's weight was established.
+enum ServingWeightMethod {
+  /// The source stated the weight outright.
+  PUBLISHED
+  /// Computed from the source's own per-100 g and per-serving figures, and
+  /// only accepted when every nutrient agreed. See FoodServing.
+  DERIVED_FROM_SOURCE
+  /// A serving label with no weight behind it.
+  UNKNOWN
+
+  @@map("serving_weight_method")
+}
+
+/// A named portion of a food — "1 bowl", "1 plate", "1 piece".
+///
+/// This is what makes the food database usable by a practitioner. A dietitian
+/// records "one bowl of khichdi", not "173.4 grams of khichdi", and a client
+/// logging a meal certainly does not weigh it.
+///
+/// WEIGHTS ARE NEVER INVENTED. Phase 8A deliberately seeded no household
+/// conversion, because "1 cup of rice = N g" without a source is a fabricated
+/// number. A row here exists only when the source supplied the weight, or when
+/// it can be recovered from the source's own arithmetic — see
+/// `weightMethod` and `agreementSpread`.
+model FoodServing {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  foodId          String @map("food_id") @db.Uuid
+  /// Which release described this serving. Servings are source data, not
+  /// Vyom's opinion, so they carry provenance like any other value.
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  /// The publisher's own wording — "bowl", "tea cup", "plate", "idli".
+  /// Kept verbatim: a dietitian recognises "katori" and would not recognise
+  /// whatever a normaliser turned it into.
+  label String @db.VarChar(80)
+
+  /// Grams. Null when the source gave a label but no usable weight — an honest
+  /// "we know they call it a bowl, we do not know what it weighs".
+  weightGrams Decimal? @map("weight_grams") @db.Decimal(10, 3)
+
+  weightMethod ServingWeightMethod @default(UNKNOWN) @map("weight_method")
+
+  /// For a derived weight: the relative disagreement between the nutrients
+  /// used to recover it, as a fraction. 0 means every nutrient implied exactly
+  /// the same weight.
+  ///
+  /// Stored because a derivation is only trustworthy if it is reproducible and
+  /// checkable. A future reviewer can see not just the number but how firmly
+  /// the source implied it.
+  agreementSpread Decimal? @map("agreement_spread") @db.Decimal(10, 8)
+
+  /// The serving a UI offers first.
+  isDefault Boolean @default(false) @map("is_default")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  food          Food                   @relation(fields: [foodId], references: [id], onDelete: Cascade)
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+
+  /// One serving of a given name per food per release, so a re-import updates
+  /// rather than accumulating.
+  @@unique([foodId, sourceVersionId, label])
+  @@index([foodId])
+  @@map("food_servings")
+}
+
+/// How one source's nutrient column maps onto a Vyom nutrient.
+///
+/// Phase 8A kept this in the dataset manifest, which was fine while a manifest
+/// was the only route in. With adapters the mapping becomes something the code
+/// asserts, and it needs to be **recorded per release** — so that a value can
+/// be traced not only to its source, but to the specific column and unit that
+/// produced it, and so that an unmapped column is visible rather than silently
+/// dropped.
+model SourceNutrientMapping {
+  id              String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  /// The publisher's column or code, verbatim — "vitb6_mg".
+  sourceNutrientCode String  @map("source_nutrient_code") @db.VarChar(120)
+  sourceNutrientName String? @map("source_nutrient_name") @db.VarChar(200)
+  /// The unit as the source publishes it, before any normalisation.
+  sourceUnit         String? @map("source_unit") @db.VarChar(40)
+
+  /// Null when the column could not be mapped. The row still exists: a
+  /// nutrient Vyom cannot represent is a gap worth seeing, not a silent drop.
+  nutrientId String? @map("nutrient_id") @db.Uuid
+
+  status NutrientMappingStatus @default(UNMAPPED)
+  notes  String?               @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Cascade)
+  nutrient      Nutrient?              @relation(fields: [nutrientId], references: [id], onDelete: Restrict)
+
+  /// Named explicitly: Prisma's generated name for this pair exceeds the 63
+  /// character identifier limit and gets truncated to something unreadable.
+  @@unique([sourceVersionId, sourceNutrientCode], map: "source_nutrient_mappings_source_version_id_code_key")
+  @@index([status])
+  @@map("source_nutrient_mappings")
 }

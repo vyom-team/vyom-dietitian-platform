@@ -15,7 +15,7 @@ invented. Every nutrient figure traces to an authoritative Indian reference
 
 ## Current phase
 
-> **Phase 8A — Nutrition Data Foundation**
+> **Phase 8B — Food Database Ingestion**
 
 The repository contains the application shell, design system, database
 foundation, authentication with role-based access control and Row Level

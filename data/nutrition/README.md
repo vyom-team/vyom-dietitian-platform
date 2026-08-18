@@ -33,13 +33,13 @@ its checksum stops meaning anything.
 | Source | Version | Held | Format | Development | Production | Import |
 |---|---|---|---|---|---|---|
 | **IFCT** ICMR-NIN | 2017 | ✅ PDF | PDF, 585 pp | Read-only reference | `PERMISSION_REQUIRED` | ❌ **Not importable** |
-| **INDB** Anuvaad | 2024.11 | ❌ | XLSX | — | — | Not acquired |
+| **INDB** Anuvaad | 2024.11 | ✅ XLSX | XLSX, 1,014 recipes | Allowed | `UNKNOWN` | ✅ **Imported** |
 | **ICMR-NIN RDA/EAR** | 2020 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
 | **ICMR-NIN Dietary Guidelines** | 2024 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
 | **USDA FoodData Central** | 2026-04 | ❌ | CSV / JSON | — | `UNKNOWN` | Not acquired |
 
-**No nutrition data has been imported into Vyom.** The database holds the
-vocabulary — sources, nutrients, units — and no food records.
+**INDB is imported; nothing else is.** IFCT is held as a reference document
+only, and the RDA/EAR and Dietary Guidelines are registered but not acquired.
 
 ---
 
@@ -81,6 +81,35 @@ academia.edu are not authoritative and must not be used.
 
 ---
 
+## INDB 2024.11 — imported
+
+`raw/indb/Anuvaad_INDB_2024.11.xlsx` · 1,063,574 bytes · SHA-256 `c3902389…dda25d9`
+
+Downloaded from the publisher's own site. No login, no paywall, no technical
+protection — nothing was bypassed to obtain it.
+
+1,014 commonly consumed Indian recipes with 40 nutrients each, per 100 g and per
+serving. Better suited to meal planning than a composition table: a dietitian
+plans "a bowl of dal", not "22 g of raw toor dal".
+
+**Licence: `UNKNOWN`.** The site describes it as open-access and states no formal
+terms; the authors' repository carries no LICENSE file. That is an unresolved
+question, not a permission — and INDB is derived primarily from IFCT 2017, so it
+sits downstream of the same ICMR-NIN rights.
+
+Known gaps, all visible in the data rather than papered over:
+
+- **No vitamin B12.** Not in the dataset. Nothing fabricates it, so INDB foods
+  carry no B12 row — which reads as "not measured". Worth knowing for a largely
+  vegetarian population.
+- **No food categories.** Every record imports as `OTHER`; the publisher's own
+  sub-dataset name is kept on the source record instead.
+- **Recipes only.** The 1,095 individual food items described in the method paper
+  are not in this download.
+- **No preparation state.** Imports as `UNKNOWN` rather than a guessed `COOKED`.
+
+---
+
 ## Manifests
 
 One JSON file per source in `manifests/`, recording publisher, version, official
@@ -95,11 +124,17 @@ established the manifest says `UNKNOWN` — never a plausible guess.
 ## Commands
 
 ```bash
-npm run nutrition:registry                              # sources, nutrients, units
+npm run nutrition:registry          # sources, nutrients, units — no values
+
+# adapter route (INDB and future inspected datasets)
+npm run nutrition:import-source -- --source INDB --version 2024.11     --file raw/indb/Anuvaad_INDB_2024.11.xlsx --dry-run
+npm run nutrition:import-source -- --source INDB --version 2024.11     --file raw/indb/Anuvaad_INDB_2024.11.xlsx
+
+# manifest route (flat nutrient tables)
 npm run nutrition:import -- --manifest <file>.json --dry-run
-npm run nutrition:import -- --manifest <file>.json
-npm run nutrition:report                                # data quality
-npm run nutrition:verify                                # security assertions
+
+npm run nutrition:report            # data quality
+npm run nutrition:verify            # security assertions
 ```
 
 `NUTRITION_DATA_DIR` overrides this directory. It defaults here.

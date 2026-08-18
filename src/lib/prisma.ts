@@ -39,13 +39,24 @@ const globalForPrisma = globalThis as unknown as {
   prisma: PrismaClient | undefined;
 };
 
+let client: PrismaClient | undefined;
+
+/**
+ * Returns the one and only client, constructing it on first call.
+ *
+ * The memoisation is not an optimisation — it is a correctness requirement.
+ * `prisma` below is a Proxy that calls this on every property access, and
+ * Prisma's own methods reach for sibling properties on `this` (`_engine`,
+ * `_engineConfig`, `_transactionWithCallback`). If each access returned a fresh
+ * instance, an interactive transaction would open on one engine and commit on
+ * another, which fails with P2028 "Transaction not found".
+ */
 function getClient(): PrismaClient {
   if (globalForPrisma.prisma) return globalForPrisma.prisma;
+  if (client) return client;
 
-  const client = createPrismaClient();
-  if (!isDevelopment) return client;
-
-  globalForPrisma.prisma = client;
+  client = createPrismaClient();
+  if (isDevelopment) globalForPrisma.prisma = client;
   return client;
 }
 
@@ -57,7 +68,17 @@ function getClient(): PrismaClient {
  * runs a query hits the missing-configuration error.
  */
 export const prisma = new Proxy({} as PrismaClient, {
-  get(_target, property, receiver) {
-    return Reflect.get(getClient(), property, receiver);
+  get(_target, property) {
+    const instance = getClient();
+    const value = Reflect.get(instance, property, instance);
+
+    /*
+     * Methods are bound to the real client, never left to be invoked with the
+     * Proxy as `this`. Prisma's methods are prototype methods that call each
+     * other through `this`; a Proxy receiver would route every one of those
+     * internal hops back through this trap, which is both wasteful and — for
+     * `$transaction` — incorrect.
+     */
+    return typeof value === "function" ? value.bind(instance) : value;
   },
 }) satisfies PrismaClient;

@@ -2,6 +2,7 @@ import { z } from "zod";
 
 import { isKnownNutrientCode, nutrientUnit } from "@/lib/nutrition/nutrients";
 import { isKnownSourceCode } from "@/lib/nutrition/sources";
+import { QUANTITY_UNITS } from "@/lib/nutrition/calculate/types";
 import { isValidBasisUnit } from "@/lib/nutrition/units";
 
 /**
@@ -245,36 +246,117 @@ export function parseDatasetManifest(
 export const DECIMAL_LITERAL = /^[+-]?(\d+(\.\d*)?|\.\d+)([eE][+-]?\d+)?$/;
 
 /**
+ * Collapses a Next.js search param to a single string.
+ *
+ * `searchParams` yields `string | string[] | undefined`, because a URL may
+ * repeat a key: `?unit=GRAM&unit=SERVING` arrives as an array. A schema
+ * expecting a string throws on that, and a page calling `.parse()` would answer
+ * a hand-edited URL with a crash rather than a sensible default.
+ *
+ * The last occurrence wins, matching how a browser form would overwrite an
+ * earlier value.
+ */
+function singleParam(value: unknown): unknown {
+  if (Array.isArray(value)) return value.at(-1);
+  return value;
+}
+
+/**
  * Food search query, as it arrives from the URL.
  *
  * `.catch()` on the coerced values clamps nonsense rather than erroring: a
  * hand-edited `?page=abc` should show page one, not a crash.
  */
 export const foodSearchQuerySchema = z.object({
-  q: z
-    .string()
-    .trim()
-    .max(120)
-    .optional()
-    .transform((value) => (value === "" ? undefined : value)),
-  category: z
-    .string()
-    .optional()
-    .transform((value) =>
-      value && (FOOD_CATEGORIES as readonly string[]).includes(value)
-        ? (value as (typeof FOOD_CATEGORIES)[number])
-        : undefined,
-    ),
-  source: z
-    .string()
-    .trim()
-    .max(40)
-    .optional()
-    .transform((value) => (value === "" || value === "all" ? undefined : value)),
-  page: z.coerce.number().int().min(1).catch(1),
+  q: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .trim()
+      .max(120)
+      .optional()
+      .catch(undefined)
+      .transform((value) => (value === "" ? undefined : value)),
+  ),
+  category: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .optional()
+      .catch(undefined)
+      .transform((value) =>
+        value && (FOOD_CATEGORIES as readonly string[]).includes(value)
+          ? (value as (typeof FOOD_CATEGORIES)[number])
+          : undefined,
+      ),
+  ),
+  source: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .trim()
+      .max(40)
+      .optional()
+      .catch(undefined)
+      .transform((value) => (value === "" || value === "all" ? undefined : value)),
+  ),
+  page: z.preprocess(singleParam, z.coerce.number().int().min(1).catch(1)),
 });
 
 export type FoodSearchQuery = z.output<typeof foodSearchQuerySchema>;
 
 /** Modest on purpose: nobody scans a hundred foods, and a big page is slow. */
 export const FOODS_PER_PAGE = 20;
+
+// ---------------------------------------------------------------------------
+// Food nutrition calculator
+// ---------------------------------------------------------------------------
+
+/**
+ * Calculator input, as it arrives from the URL.
+ *
+ * The quantity stays a **string** all the way to the engine. `z.coerce.number()`
+ * would turn "0.1" into a binary float before anything had a chance to preserve
+ * it, and a nutrition figure must not acquire error on the way in. Range and
+ * sign are checked by the engine, which owns those rules and reports them as
+ * typed errors a screen can render.
+ *
+ * `.catch()` clamps a hand-edited URL to a usable default rather than throwing:
+ * a mistyped query string should show the form, not a crash.
+ */
+export const foodCalculationQuerySchema = z.object({
+  unit: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .optional()
+      .catch(undefined)
+      .transform((value) =>
+        value && (QUANTITY_UNITS as readonly string[]).includes(value)
+          ? (value as (typeof QUANTITY_UNITS)[number])
+          : undefined,
+      ),
+  ),
+  quantity: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .trim()
+      .max(20)
+      .optional()
+      .catch(undefined)
+      .transform((value) => (value === "" ? undefined : value)),
+  ),
+  serving: z.preprocess(
+    singleParam,
+    z
+      .string()
+      .trim()
+      .max(64)
+      .optional()
+      .catch(undefined)
+      .transform((value) => (value === "" ? undefined : value)),
+  ),
+});
+
+export type FoodCalculationQuery = z.output<typeof foodCalculationQuerySchema>;

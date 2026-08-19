@@ -184,6 +184,8 @@ export type FoodDetail = {
   externalId: string | null;
   aliases: string[];
   servings: {
+    /** Needed to calculate by serving — the engine identifies a portion by id. */
+    id: string;
     label: string;
     weightGrams: string | null;
     weightMethod: string;
@@ -236,7 +238,7 @@ export async function getFood(foodId: string): Promise<FoodDetail | null> {
       },
       aliases: { select: { alias: true }, orderBy: { alias: "asc" } },
       servings: {
-        select: { label: true, weightGrams: true, weightMethod: true },
+        select: { id: true, label: true, weightGrams: true, weightMethod: true },
         orderBy: [{ isDefault: "desc" }, { label: "asc" }],
       },
       nutrients: {
@@ -276,6 +278,7 @@ export async function getFood(foodId: string): Promise<FoodDetail | null> {
     externalId: food.originSourceFoodId,
     aliases: food.aliases.map((alias) => alias.alias),
     servings: food.servings.map((serving) => ({
+      id: serving.id,
       label: serving.label,
       weightGrams: serving.weightGrams?.toString() ?? null,
       weightMethod: serving.weightMethod,

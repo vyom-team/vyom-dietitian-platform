@@ -25,18 +25,19 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 8B — Food Database Ingestion`
+**Current phase:** `PHASE 8C — Nutrition Calculation Engine (foundation)`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
 access control and Row Level Security (3), practice onboarding (4), team and
 staff management with invitations (5), the client management foundation (6),
 the nutrition assessment foundation (7), the nutrition data foundation
-(8A), and dataset ingestion with a real Indian food database (8B).
+(8A), dataset ingestion with a real Indian food database (8B), and the
+deterministic food nutrition calculation engine with its food database UI (8C).
 
-Still absent by design: the nutrition calculation engine, meal plans, recipes,
-the food database UI, progress tracking, client portal, and billing. The Client
-model holds no clinical data — that lives on NutritionAssessment.
+Still absent by design: nutrition targets (BMR, TDEE, calorie and macro
+targets), meal plans, recipes, progress tracking, client portal, and billing.
+The Client model holds no clinical data — that lives on NutritionAssessment.
 
 **The food database holds real data.** 1,014 Indian recipes from INDB 2024.11,
 with serving sizes. IFCT is held as a PDF only — ICMR-NIN denies text
@@ -51,11 +52,17 @@ version, and **no dataset is cleared for commercial use**; all are
 DEVELOPMENT_ONLY until reviewed. A missing nutrient value is the absence of a
 row, never a zero.
 
-**No derived nutrition value is stored or calculated anywhere.** BMI is the one
-exception and is derived on read, returned as a bare number with no category:
-Asian-Indian cutoffs come from the PRD and are not in this repo. Calories,
-macros, TDEE, and BMR need reference values we do not have — see
-`docs/nutrition-assessment.md`.
+**No derived nutrition value is ever stored.** Phase 8C calculates nutrient
+amounts from published values on demand — `amount = value × grams / basis`, one
+formula for all forty nutrients — and persists none of them; a stored copy goes
+stale the moment a source is corrected. See `docs/nutrition-calculation.md`.
+A missing nutrient stays missing and never becomes zero, and no energy is
+derived from macronutrients.
+
+BMI is likewise derived on read, returned as a bare number with no category:
+Asian-Indian cutoffs come from the PRD and are not in this repo. Calorie
+targets, macro targets, TDEE, and BMR are still absent — they need reference
+values we do not have, see `docs/nutrition-assessment.md`.
 
 **Terminology:** the database says `Organization`; the UI says **practice**.
 One entity, two names — see `docs/organization-onboarding.md`. Do not rename.

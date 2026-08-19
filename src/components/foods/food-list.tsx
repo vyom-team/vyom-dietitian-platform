@@ -1,3 +1,5 @@
+import Link from "next/link";
+
 import { Badge } from "@/components/ui/badge";
 import {
   Table,
@@ -20,6 +22,9 @@ import type { FoodSearchResult } from "@/services/nutrition/search";
  * Serving sizes are shown when the source established one. Where it did not,
  * the cell says so rather than showing a plausible number — an unsourced
  * portion weight would be a fabricated figure in a clinical tool.
+ *
+ * The name is a real link rather than a row click handler, so a practitioner can
+ * open several foods in tabs while comparing them.
  */
 export function FoodList({ foods }: { foods: FoodSearchResult[] }) {
   return (
@@ -38,7 +43,12 @@ export function FoodList({ foods }: { foods: FoodSearchResult[] }) {
           {foods.map((food) => (
             <TableRow key={food.id}>
               <TableCell>
-                <span className="font-medium">{food.canonicalName}</span>
+                <Link
+                  href={`/foods/${food.id}`}
+                  className="font-medium underline-offset-4 hover:underline focus-visible:underline"
+                >
+                  {food.canonicalName}
+                </Link>
                 {food.preparationState !== "UNKNOWN" ? (
                   <Badge variant="outline" className="ml-2 align-middle">
                     {food.preparationState === "RAW" ? "Raw" : "Cooked"}

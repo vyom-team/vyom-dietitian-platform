@@ -872,13 +872,14 @@ model NutritionSourceVersion {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  source          NutritionSource @relation(fields: [sourceId], references: [id], onDelete: Restrict)
+  source           NutritionSource         @relation(fields: [sourceId], references: [id], onDelete: Restrict)
   foodNutrients    FoodNutrient[]
   sourceFoods      SourceFood[]
   imports          DatasetImport[]
   foodsOriginated  Food[]                  @relation("FoodOriginVersion")
   servings         FoodServing[]
   nutrientMappings SourceNutrientMapping[]
+  referenceRules   ReferenceRule[]
 
   /// One row per release of a source. This pair is also the natural key the
   /// importer resolves from configuration.
@@ -915,8 +916,9 @@ model Nutrient {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  foodNutrients   FoodNutrient[]
-  sourceMappings  SourceNutrientMapping[]
+  foodNutrients  FoodNutrient[]
+  sourceMappings SourceNutrientMapping[]
+  referenceRules ReferenceRule[]
 
   @@index([category, displayOrder])
   @@map("nutrients")
@@ -936,7 +938,7 @@ model Food {
 
   /// The name a practitioner sees, exactly as the source published it.
   /// Never rewritten by an importer — see normalizedName for the search form.
-  canonicalName String  @map("canonical_name") @db.VarChar(200)
+  canonicalName String @map("canonical_name") @db.VarChar(200)
 
   /// The comparison form: Unicode-normalised, case-folded, punctuation and
   /// bracketed alternatives flattened. Search matches on this so that
@@ -944,7 +946,7 @@ model Food {
   /// while the published name survives untouched for display.
   normalizedName String @map("normalized_name") @db.VarChar(300)
 
-  description   String? @db.Text
+  description String? @db.Text
 
   category FoodCategory
   foodType FoodType     @map("food_type")
@@ -998,7 +1000,7 @@ model FoodAlias {
   id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
   foodId String @map("food_id") @db.Uuid
 
-  alias String @db.VarChar(200)
+  alias        String  @db.VarChar(200)
   /// ISO 639-1 where known, e.g. "hi", "ta". Null for an unlabelled variant.
   languageCode String? @map("language_code") @db.VarChar(8)
   /// Where in India this name is used. Free text: regional naming does not fit
@@ -1418,4 +1420,188 @@ model SourceNutrientMapping {
   @@unique([sourceVersionId, sourceNutrientCode], map: "source_nutrient_mappings_source_version_id_code_key")
   @@index([status])
   @@map("source_nutrient_mappings")
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition requirements — Phase 8D
+//
+// The *requirement* side of nutrition, as distinct from the *composition* side
+// above. Food composition says what is in a food; a reference rule says how
+// much a person needs. They are different publications with different
+// licensing, and conflating them would let a food table imply a requirement.
+//
+// EVERY TABLE HERE SHIPS EMPTY. The architecture exists so that clinical
+// reference values have a provenanced, versioned home the moment they are
+// licensed — not so that plausible numbers can be typed into a seed file.
+// ---------------------------------------------------------------------------
+
+/// What kind of rule a reference row expresses.
+///
+/// Each value corresponds to one step of the target pipeline. A rule type that
+/// has no acquired reference simply has no rows, and the engine reports
+/// REFERENCE_REQUIRED for that step rather than substituting anything.
+enum ReferenceRuleType {
+  /// A named resting-metabolism equation, e.g. Mifflin-St Jeor.
+  BMR_EQUATION
+  /// Multiplier applied to BMR for habitual activity.
+  ACTIVITY_FACTOR
+  /// Energy added or removed for a weight goal.
+  GOAL_ENERGY_ADJUSTMENT
+  PROTEIN_PER_KG
+  FAT_ENERGY_PERCENT
+  CARBOHYDRATE_ENERGY_PERCENT
+  FIBRE_INTAKE
+  MICRONUTRIENT_INTAKE
+
+  @@map("reference_rule_type")
+}
+
+/// What a reference number *means*.
+///
+/// Never interchangeable, and never relabelled for display. An Adequate Intake
+/// is not a Recommended Dietary Allowance, and a Tolerable Upper Intake Level
+/// is the opposite of a target. Showing "RDA" above a figure the publisher
+/// called an AI would misrepresent the source.
+enum ReferenceValueType {
+  /// Recommended Dietary Allowance.
+  RDA
+  /// Estimated Average Requirement.
+  EAR
+  /// Adequate Intake — used where an RDA cannot be established.
+  AI
+  /// Tolerable Upper Intake Level. A ceiling, never a target.
+  UL
+  /// A published range rather than a point value; uses valueMin and valueMax.
+  RANGE
+  /// A dimensionless multiplier, e.g. an activity factor.
+  FACTOR
+  /// A named equation rather than a number; the coefficients live in code.
+  EQUATION
+
+  @@map("reference_value_type")
+}
+
+/// Which sexes a rule applies to.
+///
+/// Deliberately not the same enum as ClientGender. A reference publication
+/// states values for female and male populations; it says nothing about how a
+/// person describes themselves. Mapping one to the other is a decision the
+/// resolver makes explicitly, and it refuses rather than guessing.
+enum SexApplicability {
+  ANY
+  FEMALE
+  MALE
+
+  @@map("sex_applicability")
+}
+
+/// Physiological state a rule applies to.
+///
+/// Present so pregnancy and lactation rules have somewhere correct to live.
+/// **Nothing resolves to anything but NONE today**: the assessment model
+/// captures no physiological state, and inferring pregnancy from sex or
+/// lactation from age would be exactly the kind of guess this project forbids.
+enum PhysiologicalState {
+  NONE
+  PREGNANCY
+  LACTATION
+
+  @@map("physiological_state")
+}
+
+/// One clinical reference rule — a requirement value with its applicability.
+///
+/// WHY ONE TABLE AND NOT rule + value
+///
+/// A rule and its value are one-to-one: "iron RDA for women aged 19-49" is a
+/// single number. Splitting it would add a join to every lookup and buy
+/// nothing. A rule that varies by age or sex is a *different row* with
+/// different applicability, which is what makes resolution a query rather than
+/// a chain of conditionals.
+///
+/// PROVENANCE
+///
+/// `sourceVersionId` is required and reuses the Phase 8A spine, so a target
+/// traces to a publication exactly as a nutrient value does. There is no path
+/// by which a requirement value exists without a named release behind it.
+model ReferenceRule {
+  id String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+
+  /// The publication release this rule was read from. Required.
+  sourceVersionId String @map("source_version_id") @db.Uuid
+
+  ruleType ReferenceRuleType @map("rule_type")
+
+  /// Which nutrient, for MICRONUTRIENT_INTAKE. Null for every other rule type.
+  nutrientId String? @map("nutrient_id") @db.Uuid
+
+  /// Stable key for a rule that is not about a nutrient — the ActivityLevel or
+  /// PrimaryGoal enum value it applies to, or an equation name such as
+  /// "MIFFLIN_ST_JEOR". Null for MICRONUTRIENT_INTAKE, which keys on nutrient.
+  ruleKey String? @map("rule_key") @db.VarChar(60)
+
+  // --- Applicability --------------------------------------------------------
+  // How a population is matched. Bounds are inclusive and in whole years.
+  // Null means "unbounded on that side", not "unknown".
+  sexApplicability   SexApplicability   @default(ANY) @map("sex_applicability")
+  ageMinYears        Int?               @map("age_min_years")
+  ageMaxYears        Int?               @map("age_max_years")
+  physiologicalState PhysiologicalState @default(NONE) @map("physiological_state")
+
+  // --- The value ------------------------------------------------------------
+  valueType ReferenceValueType @map("value_type")
+
+  /// Point value. Null for RANGE and EQUATION.
+  value    Decimal? @db.Decimal(14, 6)
+  /// Range bounds. Both set for RANGE, both null otherwise.
+  valueMin Decimal? @map("value_min") @db.Decimal(14, 6)
+  valueMax Decimal? @map("value_max") @db.Decimal(14, 6)
+
+  unit ReferenceUnit
+
+  /// The publisher's own wording — a table caption, a footnote, a caveat.
+  /// Kept verbatim so a reviewer can check the row against the page.
+  notes String? @db.Text
+
+  isActive Boolean @default(true) @map("is_active")
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+  nutrient      Nutrient?              @relation(fields: [nutrientId], references: [id], onDelete: Restrict)
+
+  /// Idempotency key for a future importer. Declared with an explicit name
+  /// because Prisma's generated name for eight columns exceeds the 63-character
+  /// identifier limit and gets truncated to something unreadable.
+  ///
+  /// The migration creates it with NULLS NOT DISTINCT, which Prisma cannot yet
+  /// express: several columns are legitimately null, and default Postgres
+  /// semantics would let two identical rules coexist.
+  @@unique([sourceVersionId, ruleType, ruleKey, nutrientId, sexApplicability, ageMinYears, ageMaxYears, physiologicalState], map: "reference_rules_applicability_key")
+  /// Resolution query: rule type first, then narrow by applicability.
+  @@index([ruleType, isActive])
+  @@index([sourceVersionId])
+  @@index([nutrientId])
+  @@map("reference_rules")
+}
+
+/// The unit a requirement is expressed in.
+///
+/// Separate from NutrientUnit, which describes a quantity *in a food*. A
+/// requirement is per day or per kilogram of body weight, and "mg" alone would
+/// not say which.
+enum ReferenceUnit {
+  KCAL_PER_DAY
+  G_PER_DAY
+  MG_PER_DAY
+  UG_PER_DAY
+  /// Grams per kilogram of body weight per day.
+  G_PER_KG_PER_DAY
+  /// Percentage of total energy intake.
+  PERCENT_OF_ENERGY
+  /// Dimensionless multiplier.
+  FACTOR
+
+  @@map("reference_unit")
 }

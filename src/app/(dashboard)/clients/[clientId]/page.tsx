@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ClipboardList, Pencil } from "lucide-react";
+import { ClipboardList, Pencil, Target } from "lucide-react";
 
 import {
   ArchiveClientButton,
@@ -186,12 +186,24 @@ export default async function ClientProfilePage({
           description="Assessments recorded for this client, newest first."
           action={
             assessments.length > 0 ? (
-              <Button variant="outline" size="sm" asChild>
-                <Link href={`/clients/${client.id}/assessments/new`}>
-                  <ClipboardList className="size-4" aria-hidden="true" />
-                  New assessment
-                </Link>
-              </Button>
+              <div className="flex flex-wrap gap-2">
+                {/*
+                  * Offered only once an assessment exists: targets are derived
+                  * from one, and a link to an empty-state page is a dead end.
+                  */}
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/clients/${client.id}/nutrition-targets`}>
+                    <Target className="size-4" aria-hidden="true" />
+                    Nutrition targets
+                  </Link>
+                </Button>
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/clients/${client.id}/assessments/new`}>
+                    <ClipboardList className="size-4" aria-hidden="true" />
+                    New assessment
+                  </Link>
+                </Button>
+              </div>
             ) : undefined
           }
         >

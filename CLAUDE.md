@@ -25,7 +25,7 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 8C — Nutrition Calculation Engine (foundation)`
+**Current phase:** `PHASE 8D — Nutrition Target Engine (architecture)`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
@@ -33,11 +33,20 @@ access control and Row Level Security (3), practice onboarding (4), team and
 staff management with invitations (5), the client management foundation (6),
 the nutrition assessment foundation (7), the nutrition data foundation
 (8A), dataset ingestion with a real Indian food database (8B), and the
-deterministic food nutrition calculation engine with its food database UI (8C).
+deterministic food nutrition calculation engine with its food database UI
+(8C), and the nutrition target architecture (8D).
 
-Still absent by design: nutrition targets (BMR, TDEE, calorie and macro
-targets), meal plans, recipes, progress tracking, client portal, and billing.
-The Client model holds no clinical data — that lives on NutritionAssessment.
+Still absent by design: meal plans, recipes, progress tracking, client portal,
+and billing. The Client model holds no clinical data — that lives on
+NutritionAssessment.
+
+**Nutrition targets are architecture, not numbers.** Phase 8D built the
+reference-rule schema, the resolver, the pipeline, and the UI — and populated
+**nothing**. `reference_rules` ships empty because ICMR-NIN RDA/EAR 2020 is
+registered but unacquired and `PERMISSION_REQUIRED`. Eight of nine target types
+return `REFERENCE_REQUIRED`. Resting energy (Mifflin-St Jeor) is the sole
+exception, and carries a US-population caveat. A test asserts the reference
+table is empty — see `docs/nutrition-targets.md`.
 
 **The food database holds real data.** 1,014 Indian recipes from INDB 2024.11,
 with serving sizes. IFCT is held as a PDF only — ICMR-NIN denies text

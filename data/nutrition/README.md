@@ -32,14 +32,21 @@ its checksum stops meaning anything.
 
 | Source | Version | Held | Format | Development | Production | Import |
 |---|---|---|---|---|---|---|
-| **IFCT** ICMR-NIN | 2017 | ✅ PDF | PDF, 585 pp | Read-only reference | `PERMISSION_REQUIRED` | ❌ **Not importable** |
+| **IFCT** ICMR-NIN | 2017 | ✅ PDF + extracted CSV | PDF 585 pp; CSV 542 rows | Allowed | `PERMISSION_REQUIRED` | ✅ **Imported** |
 | **INDB** Anuvaad | 2024.11 | ✅ XLSX | XLSX, 1,014 recipes | Allowed | `UNKNOWN` | ✅ **Imported** |
 | **ICMR-NIN RDA/EAR** | 2020 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
 | **ICMR-NIN Dietary Guidelines** | 2024 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
 | **USDA FoodData Central** | 2026-04 | ❌ | CSV / JSON | — | `UNKNOWN` | Not acquired |
 
-**INDB is imported; nothing else is.** IFCT is held as a reference document
-only, and the RDA/EAR and Dietary Guidelines are registered but not acquired.
+**INDB and IFCT are imported.** The RDA/EAR and Dietary Guidelines are
+registered but not acquired.
+
+IFCT is imported from a **tabular extraction** of the publication, not from a
+publisher-issued data file — ICMR-NIN issues none. Every value is therefore a
+transcription. It was cross-verified against a second, independent extraction:
+1,950 Table 1 values compared, zero mismatches. The tables beyond Table 1 could
+not be cross-verified because the second extraction was too corrupted there. See
+`manifests/ifct-2017-tables.source.json` for the full record.
 
 > **2026-08-20 — permission reported.** The project owner reports permission
 > from ICMR-NIN to use these publications **for development**. Recorded as

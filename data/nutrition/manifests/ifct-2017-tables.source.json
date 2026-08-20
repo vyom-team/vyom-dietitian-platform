@@ -1,0 +1,55 @@
+{
+  "source": "IFCT",
+  "dataset": "Indian Food Composition Tables — extracted data tables",
+  "version": "2017",
+  "publisher": "ICMR-National Institute of Nutrition",
+  "country": "IN",
+
+  "filename": "raw/ifct/IFCT2017-tables.csv",
+  "sizeBytes": 463592,
+  "sha256": "8bb56e872b9e46425cde1c1ea9e05043e5f2e81058a898c226a844bf84fcc9a4",
+  "format": "CSV",
+  "rows": 542,
+  "columns": 191,
+
+  "acquiredAt": "2026-08-20",
+  "acquiredBy": "project owner — tabular extraction of the IFCT 2017 publication, supplied to this repository already extracted",
+
+  "derivation": {
+    "note": "This file is NOT a publisher-issued data file. ICMR-NIN publishes IFCT 2017 as a book; no CSV, XLSX, JSON or API exists on nin.res.in. This CSV was produced by extracting the printed tables.",
+    "implication": "Every value is a transcription, so transcription error is a real risk that the publisher's own file would not carry. That is why the cross-verification below was performed and why it should be repeated if the file is ever regenerated."
+  },
+
+  "verification": {
+    "performedAt": "2026-08-20",
+    "method": "Compared against a second, independent extraction of the same PDF (a mightymerge.io page-by-page CSV dump). The two files were produced by different processes, so agreement is meaningful evidence rather than a self-check.",
+    "scope": "Table 1 proximates — moisture, protein, ash, total fat, dietary fibre (total/insoluble/soluble), available carbohydrate, energy. Restricted to blocks where the second extraction carried a complete 9-column header, because its header row was corrupted on some pages.",
+    "valuesCompared": 1950,
+    "mismatches": 0,
+    "result": "PASS",
+    "notVerified": [
+      "Minerals, vitamins, fatty acids, amino acids, and every other table beyond Table 1. The second extraction was too corrupted in those sections to compare against — merged header cells and dropped columns.",
+      "Absolute correctness against the printed book. Neither extraction has been checked against the PDF itself, whose owner permissions deny text extraction."
+    ]
+  },
+
+  "supersedes": {
+    "file": "IFCT.csv (mightymerge.io page dump, 21454 rows)",
+    "reason": "Structurally unusable as an import source: 57 differing header signatures, header cells merged across columns (e.g. 'TOCPHB TOCP'), dropped columns inside tables (thiamine absent from a vitamin header while its data column remained), and unit rows that did not align with their data. A one-column shift there is invisible per-row and would be clinically wrong forever. Retained only long enough to perform the cross-verification above, then deleted."
+  },
+
+  "knownGaps": {
+    "energyKcal": "IFCT publishes food energy in kilojoules only. There is no kcal column, so foods imported from this source carry ENERGY_KJ and no ENERGY. Vyom does not convert units during ingestion.",
+    "vitaminB12": "No B12 column exists in the publication's tables. Absent, not zero — the same gap INDB has.",
+    "cholesterol": "No cholesterol column in this extraction.",
+    "vitaminDTotal": "D2 and D3 are published separately with no stated total. Nothing sums them.",
+    "edibleOils": "14 records (Table 12) carry fatty-acid percentages only, with no proximates."
+  },
+
+  "licence": {
+    "statedInPublication": "The use and dissemination of the data in this book is encouraged. This publication can be reproduced for personal use with full acknowledgment of the source. However, no part of this publication can be stored or reproduced in any electronic format for creating a product without the prior written permission of the National Institute of Nutrition, Hyderabad.",
+    "implication": "Vyom is a product and stores this data electronically, so the publication's own terms require PRIOR WRITTEN PERMISSION from NIN.",
+    "status": "2026-08-20 — the project owner reports permission from ICMR-NIN. Recorded as stated; this repository has not seen or verified the grant. The source remains DEVELOPMENT_ONLY with commercial use and redistribution UNKNOWN until the written scope is on file.",
+    "action": "Obtain the written permission, record its date, signatory and scope here, and only then may a human change the source's permissionStatus."
+  }
+}

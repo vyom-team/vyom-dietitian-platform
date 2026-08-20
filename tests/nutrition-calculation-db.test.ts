@@ -512,9 +512,60 @@ describe.skipIf(!realDataUrl)("calculation against the real imported dataset", (
     expect(value(result.data.nutrients, "PROTEIN")).toBe(expectedProtein.toString());
   });
 
-  it("reports the known B12 and vitamin D gaps rather than zeroing them", async () => {
+  it("reports the B12 and vitamin D gaps rather than zeroing them, in every source", async () => {
+    /*
+     * Neither imported publication measures B12, and neither states a vitamin D
+     * total — they publish D2 and D3 separately, and nothing sums them. Checked
+     * across every source rather than on one arbitrary food, so importing a
+     * third dataset that does publish B12 makes this fail loudly rather than
+     * passing by accident.
+     */
+    const sources = await realPrisma!.nutritionSource.findMany({
+      where: { versions: { some: { foodsOriginated: { some: {} } } } },
+      select: { code: true },
+      orderBy: { code: "asc" },
+    });
+
+    expect(sources.length).toBeGreaterThan(0);
+
+    for (const source of sources) {
+      const food = await realPrisma!.food.findFirst({
+        where: {
+          isActive: true,
+          nutrients: { some: {} },
+          originSourceVersion: { source: { code: source.code } },
+        },
+        orderBy: [{ canonicalName: "asc" }, { id: "asc" }],
+        select: { id: true },
+      });
+
+      if (!food) continue;
+
+      const result = await calculateFoodNutrition(
+        { foodId: food.id, quantity: "100", unit: "GRAM" },
+        realPrisma!,
+      );
+
+      expect(result.ok, `${source.code} food failed to calculate`).toBe(true);
+      if (!result.ok) continue;
+
+      expect(value(result.data.nutrients, "VITAMIN_B12"), source.code).toBeUndefined();
+      expect(value(result.data.nutrients, "VITAMIN_D"), source.code).toBeUndefined();
+      expect(result.data.unavailableNutrients).toContain("VITAMIN_B12");
+      expect(result.data.unavailableNutrients).toContain("VITAMIN_D");
+    }
+  });
+
+  it("carries INDB's separately published vitamin D fractions", async () => {
+    // INDB publishes D2 and D3 for every food. IFCT publishes them for only
+    // some, so this is asserted against the source that actually makes the
+    // claim rather than against whichever food sorts first.
     const food = await realPrisma!.food.findFirst({
-      where: { isActive: true, nutrients: { some: {} } },
+      where: {
+        isActive: true,
+        nutrients: { some: {} },
+        originSourceVersion: { source: { code: "INDB" } },
+      },
       orderBy: [{ canonicalName: "asc" }, { id: "asc" }],
       select: { id: true },
     });
@@ -529,13 +580,6 @@ describe.skipIf(!realDataUrl)("calculation against the real imported dataset", (
     expect(result.ok).toBe(true);
     if (!result.ok) return;
 
-    // INDB publishes neither. Both must be absent, and named as unavailable.
-    expect(value(result.data.nutrients, "VITAMIN_B12")).toBeUndefined();
-    expect(value(result.data.nutrients, "VITAMIN_D")).toBeUndefined();
-    expect(result.data.unavailableNutrients).toContain("VITAMIN_B12");
-    expect(result.data.unavailableNutrients).toContain("VITAMIN_D");
-
-    // D2 and D3 are published separately and are never summed into a D total.
     expect(value(result.data.nutrients, "VITAMIN_D2")).toBeDefined();
     expect(value(result.data.nutrients, "VITAMIN_D3")).toBeDefined();
   });

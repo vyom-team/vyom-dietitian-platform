@@ -52,11 +52,17 @@ describe("adapter registry", () => {
   });
 
   it("has no adapter for a dataset nobody has inspected", () => {
-    // Writing one would mean guessing column names and nutrient meanings, which
-    // is how subtly wrong nutrition gets imported.
-    expect(getAdapter("IFCT")).toBeNull();
+    /*
+     * The principle is unchanged: writing one would mean guessing column names
+     * and nutrient meanings, which is how subtly wrong nutrition gets imported.
+     * USDA still has no adapter because no USDA file has been opened.
+     *
+     * IFCT gained one only after a real extraction was supplied and
+     * cross-verified against a second independent extraction — see
+     * data/nutrition/manifests/ifct-2017-tables.source.json.
+     */
     expect(getAdapter("USDA_FDC")).toBeNull();
-    expect(availableAdapters()).toEqual(["INDB"]);
+    expect(availableAdapters().sort()).toEqual(["IFCT", "INDB"]);
   });
 });
 

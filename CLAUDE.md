@@ -56,10 +56,12 @@ Nothing is cached, which is why there is no "Calculate" button. Missing stays
 missing on both sides, and units are never silently converted between the two
 engines. See `docs/nutrition-analysis.md`.
 
-**The food database holds real data.** 1,014 Indian recipes from INDB 2024.11,
-with serving sizes. IFCT is held as a PDF only — ICMR-NIN denies text
-extraction, so it is a reference document a person reads, never an import
-source. See `data/nutrition/README.md`.
+**The food database holds real data.** 1,556 foods: 1,014 Indian recipes from
+INDB 2024.11 (with serving sizes) and 542 raw foods from IFCT 2017 (no
+servings — IFCT publishes no portion sizes). IFCT is imported from a tabular
+extraction of the book, cross-verified against a second independent extraction;
+ICMR-NIN issues no data file. **IFCT publishes energy in kilojoules only**, so
+its foods carry ENERGY_KJ and no kcal. See `data/nutrition/README.md`.
 
 **Nutrition reference data is global, not tenant-owned.** Foods, nutrients, and
 their values belong to no organization: readable by any clinical user of any

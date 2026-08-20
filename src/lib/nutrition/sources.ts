@@ -75,7 +75,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
     attributionRequired: true,
     status: "ACTIVE",
     reviewNote:
-      "Published terms have not been reviewed. Redistribution of the tables within a commercial product requires clearance from ICMR-NIN before launch.",
+      "2026-08-20: the project owner reports permission from ICMR-NIN to use this publication for DEVELOPMENT. Recorded as stated, unverified by this codebase. Commercial use and redistribution remain UNKNOWN and still require written clearance before launch. The supplied PDF also still carries the publisher's copy/extract restriction, which a licence does not remove — request a machine-readable copy rather than extracting from it.",
   },
   {
     code: "INDB",
@@ -106,7 +106,7 @@ export const SOURCE_DEFINITIONS: readonly SourceDefinition[] = [
     attributionRequired: true,
     status: "ACTIVE",
     reviewNote:
-      "Registered so requirement values have somewhere provenanced to live. No version is imported, and no requirement value exists in this codebase.",
+      "2026-08-20: the project owner reports permission from ICMR-NIN to use this publication for DEVELOPMENT. Recorded as stated, unverified by this codebase. Commercial use and redistribution remain UNKNOWN. The tables themselves have NOT been acquired — nothing is imported and no requirement value exists in this codebase. Import via npm run nutrition:import-references once a machine-readable copy is available.",
   },
   {
     code: "ICMR_NIN_DG",

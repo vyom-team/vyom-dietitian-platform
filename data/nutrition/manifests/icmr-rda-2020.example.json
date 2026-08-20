@@ -1,0 +1,69 @@
+{
+  "_README": [
+    "TEMPLATE — copy to icmr-rda-2020.json and edit. This file contains NO clinical values.",
+    "",
+    "Every number must be transcribed from the printed ICMR-NIN RDA/EAR 2020 tables.",
+    "Do not fill it in from memory, from another country's tables, or from a web search.",
+    "",
+    "Run with:  npm run nutrition:import-references -- --manifest icmr-rda-2020.json --dry-run",
+    "The dry run reports every row it would reject and writes nothing. If ANY row is",
+    "invalid the real run writes nothing either — a half-imported requirement table",
+    "produces targets that look complete and are not.",
+    "",
+    "See docs/nutrition-targets.md for what each rule type unblocks."
+  ],
+
+  "source": "ICMR_NIN_RDA",
+  "version": "2020",
+  "file": "raw/references/icmr-rda-2020.csv",
+
+  "citation": "REPLACE ME — e.g. 'ICMR-NIN RDA 2020, Table 4.2, p. 91'. Copied onto every rule so a reviewer can find the printed original.",
+
+  "delimiter": ",",
+
+  "columns": {
+    "ruleType": "rule_type",
+    "nutrient": "nutrient",
+    "ruleKey": "rule_key",
+    "sex": "sex",
+    "ageMin": "age_min",
+    "ageMax": "age_max",
+    "value": "value",
+    "valueMin": "value_min",
+    "valueMax": "value_max",
+    "unit": "unit",
+    "valueType": "value_type",
+    "notes": "notes"
+  },
+
+  "defaults": {
+    "sex": "ANY",
+    "physiologicalState": "NONE"
+  },
+
+  "_vocabularies": {
+    "rule_type": [
+      "ACTIVITY_FACTOR — multiplier on resting energy; rule_key is the ActivityLevel (SEDENTARY, LIGHTLY_ACTIVE, MODERATELY_ACTIVE, VERY_ACTIVE)",
+      "GOAL_ENERGY_ADJUSTMENT — rule_key is the PrimaryGoal (WEIGHT_LOSS, WEIGHT_GAIN, ...); unit KCAL_PER_DAY or PERCENT_OF_ENERGY",
+      "PROTEIN_PER_KG — unit G_PER_KG_PER_DAY",
+      "FAT_ENERGY_PERCENT — unit PERCENT_OF_ENERGY; use value_type RANGE with value_min/value_max where the source states a band",
+      "CARBOHYDRATE_ENERGY_PERCENT — unit PERCENT_OF_ENERGY",
+      "FIBRE_INTAKE — unit G_PER_DAY",
+      "MICRONUTRIENT_INTAKE — set nutrient, leave rule_key empty"
+    ],
+    "value_type": [
+      "RDA, EAR, AI, UL — use whichever word the publication itself uses. An AI shown as an RDA misrepresents the source's own confidence, and a UL is a ceiling rather than a target.",
+      "RANGE — fill value_min and value_max, leave value empty",
+      "FACTOR — a dimensionless multiplier"
+    ],
+    "unit": [
+      "KCAL_PER_DAY, G_PER_DAY, MG_PER_DAY, UG_PER_DAY, G_PER_KG_PER_DAY, PERCENT_OF_ENERGY, FACTOR",
+      "A micronutrient's unit MUST match its entry in src/lib/nutrition/nutrients.ts.",
+      "Iron is stored in MG, so an iron requirement must be MG_PER_DAY. The importer rejects a mismatch rather than converting: between mg and ug a mistake is a factor of a thousand."
+    ],
+    "sex": "ANY, FEMALE, MALE. Write one row per sex where the table publishes different values.",
+    "age": "Whole years, inclusive on both ends. Leave empty for unbounded. A rule with age bounds is never applied to a client whose age is unknown."
+  },
+
+  "_notPregnancyOrLactation": "Leave physiological_state as NONE. The assessment model captures no physiological state yet, so PREGNANCY and LACTATION rows would import but never resolve. Add the assessment field first."
+}

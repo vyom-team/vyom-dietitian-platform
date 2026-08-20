@@ -41,6 +41,23 @@ its checksum stops meaning anything.
 **INDB is imported; nothing else is.** IFCT is held as a reference document
 only, and the RDA/EAR and Dietary Guidelines are registered but not acquired.
 
+> **2026-08-20 — permission reported.** The project owner reports permission
+> from ICMR-NIN to use these publications **for development**. Recorded as
+> stated; this repository has not verified it. Commercial use and
+> redistribution remain `UNKNOWN` and still need written scope before launch.
+>
+> Two things this does **not** change:
+>
+> 1. **The RDA/EAR tables are still not here.** They are a different
+>    publication from IFCT and are what the nutrition-target screens need. The
+>    import path is ready — see `docs/nutrition-targets.md` — and is waiting on
+>    a machine-readable copy.
+> 2. **The IFCT PDF is still restricted.** Its owner permissions continue to
+>    deny copy/extract; a licence to use the data does not alter the bits in
+>    the file. Request a machine-readable copy rather than OCR-ing 585 pages of
+>    tables into a clinical database, where a misread decimal is invisible and
+>    permanent.
+
 ---
 
 ## IFCT 2017 — acquired, but not a data source

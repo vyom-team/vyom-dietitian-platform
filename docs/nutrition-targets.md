@@ -256,16 +256,47 @@ solution.
 
 ---
 
+## Importing reference values
+
+```
+npm run nutrition:import-references -- --manifest icmr-rda-2020.json --dry-run
+npm run nutrition:import-references -- --manifest icmr-rda-2020.json
+```
+
+A manifest maps a CSV's columns onto reference rules. Templates live at
+`data/nutrition/manifests/icmr-rda-2020.example.{json,csv}` and contain **no
+clinical values** — every figure has to be transcribed from the printed tables.
+
+### What the importer refuses
+
+- **A unit that disagrees with the nutrient dictionary.** Iron is stored in
+  milligrams, so an iron requirement must be `MG_PER_DAY`. A row declaring
+  `UG_PER_DAY` is rejected, never converted — between mg and µg a mistake is a
+  factor of a thousand and looks entirely plausible in a table.
+- **A missing unit.** Never inferred.
+- **A value shape that contradicts its type** — a `RANGE` with one bound, an
+  `RDA` with none, a micronutrient rule with no nutrient.
+- **A negative requirement**, an inverted age band, an implausible age.
+- **An unregistered source.** Registering one is a deliberate act recording
+  what would have to be licensed; an importer inventing sources would undo that.
+
+### All-or-nothing
+
+If any row fails, **nothing is written** — not even the valid rows. A partially
+imported requirement table produces targets that look complete and are not.
+Run `--dry-run` first; it reports every rejection with its line number.
+
+### What it cannot do
+
+Importing values is **not** a licence. `permissionStatus` stays where a human
+put it, and a test asserts the importer does not change it.
+
+---
+
 ## Extending this
 
-To make a target start working:
-
-1. Clear the publication's licence terms and record the determination
-2. Register the release as a `NutritionSourceVersion`
-3. Import rows into `reference_rules` with applicability and value semantics
-4. Nothing else — the engine picks them up
-
 To support pregnancy or lactation, add the physiological state to
-`NutritionAssessment` first; the resolver already matches on it.
+`NutritionAssessment` first; the resolver already matches on it, and rows
+imported before that field exists would never resolve.
 
 **Do not** hard-code a value into TypeScript to make a screen look complete.

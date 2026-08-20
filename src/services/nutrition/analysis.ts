@@ -17,7 +17,11 @@ import {
   type NutrientComparison,
   type NutritionSummary,
 } from "@/lib/nutrition/analysis/types";
-import type { Target, TargetProfile } from "@/lib/nutrition/targets/types";
+import {
+  HEADLINE_TARGET_CODES,
+  type Target,
+  type TargetProfile,
+} from "@/lib/nutrition/targets/types";
 import { calculateFoodNutritionBatch } from "@/services/nutrition/calculate";
 import { getNutritionTargets } from "@/services/nutrition/targets";
 
@@ -261,7 +265,7 @@ function buildSummary(
     });
   };
 
-  const macroCodes = new Set<string>(Object.values(MACRO_CODES));
+  const macroCodes = new Set<string>(HEADLINE_TARGET_CODES);
 
   const micronutrients = NUTRIENT_DEFINITIONS.filter(
     (definition) => !macroCodes.has(definition.code),

@@ -206,6 +206,22 @@ export type Target =
       };
     };
 
+/**
+ * The nutrients that get their own headline target.
+ *
+ * Everything else in the dictionary is reported as a micronutrient. Declared
+ * once because the target screen and the plan analysis both partition the same
+ * dictionary, and a list that drifted between them would show energy as a
+ * micronutrient on one screen and not the other.
+ */
+export const HEADLINE_TARGET_CODES = [
+  "ENERGY",
+  "PROTEIN",
+  "CARBOHYDRATE",
+  "FAT",
+  "FIBRE",
+] as const;
+
 /** A micronutrient target, keyed by the Phase 8A nutrient dictionary. */
 export type MicronutrientTarget = {
   code: string;

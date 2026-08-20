@@ -5,10 +5,11 @@ import { prisma } from "@/lib/prisma";
 import { NUTRIENT_DEFINITIONS } from "@/lib/nutrition/nutrients";
 import { ageInYears } from "@/lib/nutrition/targets/bmr";
 import { buildTargetProfile } from "@/lib/nutrition/targets/engine";
-import type {
-  ReferenceRuleData,
-  TargetInputs,
-  TargetProfile,
+import {
+  HEADLINE_TARGET_CODES,
+  type ReferenceRuleData,
+  type TargetInputs,
+  type TargetProfile,
 } from "@/lib/nutrition/targets/types";
 
 /**
@@ -35,6 +36,18 @@ import type {
  * snapshots belong to the diet-plan phase, which is the first thing that
  * genuinely has to remember "what were the targets when this plan was written".
  */
+
+/**
+ * The dictionary minus the nutrients that already have a headline target.
+ *
+ * Without this, energy and the macronutrients are reported twice — once as
+ * their own target and again in the micronutrient list, which reads as though
+ * Vyom thinks protein is a micronutrient.
+ */
+const MICRONUTRIENT_DEFINITIONS = NUTRIENT_DEFINITIONS.filter(
+  (nutrient) =>
+    !(HEADLINE_TARGET_CODES as readonly string[]).includes(nutrient.code),
+);
 
 export type TargetProfileResult =
   | { ok: true; data: TargetProfile; assessment: AssessmentSummaryForTargets }
@@ -125,7 +138,7 @@ export async function getNutritionTargets(
 
     return {
       ok: true,
-      data: buildTargetProfile(inputs, rules, NUTRIENT_DEFINITIONS),
+      data: buildTargetProfile(inputs, rules, MICRONUTRIENT_DEFINITIONS),
       assessment: {
         id: assessment.id,
         assessmentDate: assessment.assessmentDate,

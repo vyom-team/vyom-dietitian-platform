@@ -416,6 +416,35 @@ describe.skipIf(!enabled)("target calculation against a database", () => {
   });
 });
 
+describe.skipIf(!enabled)("micronutrient partitioning", () => {
+  it("does not report energy or a macronutrient as a micronutrient", async () => {
+    /*
+     * They each have their own headline target. Listing them again under
+     * "Micronutrients" reads as though Vyom thinks protein is one.
+     */
+    const result = await getNutritionTargets(
+      practiceA.orgId,
+      practiceA.clientId,
+      new Date("2026-01-01"),
+      prisma,
+    );
+
+    expect(result.ok).toBe(true);
+    if (!result.ok) return;
+
+    const codes = result.data.micronutrients.map((entry) => entry.code);
+
+    for (const headline of ["ENERGY", "PROTEIN", "CARBOHYDRATE", "FAT", "FIBRE"]) {
+      expect(codes).not.toContain(headline);
+    }
+
+    // The genuine micronutrients are still all there.
+    expect(codes).toContain("IRON");
+    expect(codes).toContain("VITAMIN_B12");
+    expect(codes).toContain("CALCIUM");
+  });
+});
+
 describe.skipIf(!enabled)("tenant isolation", () => {
   it("refuses a client belonging to another practice", async () => {
     const result = await getNutritionTargets(

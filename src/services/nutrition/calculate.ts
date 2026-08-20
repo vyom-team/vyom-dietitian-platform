@@ -134,6 +134,62 @@ function selectSourceVersion(
 // Calculation
 // ---------------------------------------------------------------------------
 
+/**
+ * The one query shape a calculation needs.
+ *
+ * Hoisted so the single-food and batch paths load exactly the same columns. Two
+ * select objects that drifted apart would mean a food behaved differently
+ * inside a plan than it did on its own detail page.
+ */
+const FOOD_CALCULATION_SELECT = {
+  id: true,
+  canonicalName: true,
+  category: true,
+  foodType: true,
+  preparationState: true,
+  originSourceVersionId: true,
+  originSourceFoodId: true,
+  servings: {
+    select: {
+      id: true,
+      foodId: true,
+      label: true,
+      weightGrams: true,
+      weightMethod: true,
+      sourceVersionId: true,
+    },
+  },
+  nutrients: {
+    select: {
+      value: true,
+      unit: true,
+      basisQuantity: true,
+      basisUnitCode: true,
+      sourceNutrientCode: true,
+      sourceVersionId: true,
+      nutrient: {
+        select: { code: true, name: true, category: true, displayOrder: true },
+      },
+      sourceVersion: {
+        select: {
+          id: true,
+          version: true,
+          source: {
+            select: {
+              code: true,
+              name: true,
+              permissionStatus: true,
+              attributionRequired: true,
+              attributionText: true,
+              priority: true,
+            },
+          },
+        },
+      },
+    },
+  },
+} as const;
+
 export type CalculateFoodNutritionInput = {
   foodId: string;
   /** A decimal string from a form, or a number from a programmatic caller. */
@@ -156,69 +212,21 @@ export type CalculateFoodNutritionInput = {
  * a test must be able to run this exact code path against a disposable database
  * rather than the one the application is pointed at.
  */
-export async function calculateFoodNutrition(
+type LoadedFood = NonNullable<
+  Awaited<ReturnType<typeof loadFoodForCalculation>>
+>;
+
+/**
+ * The calculation itself, over a food that has already been loaded.
+ *
+ * Synchronous and free of I/O on purpose: it is the step the single-food and
+ * batch entry points share, so a plan of fifteen foods runs the identical logic
+ * a detail page does, from one query instead of fifteen.
+ */
+function computeFoodNutrition(
+  food: LoadedFood,
   input: CalculateFoodNutritionInput,
-  client: PrismaClient = prisma,
-): Promise<CalculationOutcome<NutritionCalculationResult>> {
-  const food = await client.food.findFirst({
-    where: { id: input.foodId, isActive: true },
-    select: {
-      id: true,
-      canonicalName: true,
-      category: true,
-      foodType: true,
-      preparationState: true,
-      originSourceVersionId: true,
-      originSourceFoodId: true,
-      servings: {
-        select: {
-          id: true,
-          foodId: true,
-          label: true,
-          weightGrams: true,
-          weightMethod: true,
-          sourceVersionId: true,
-        },
-      },
-      nutrients: {
-        select: {
-          value: true,
-          unit: true,
-          basisQuantity: true,
-          basisUnitCode: true,
-          sourceNutrientCode: true,
-          sourceVersionId: true,
-          nutrient: {
-            select: { code: true, name: true, category: true, displayOrder: true },
-          },
-          sourceVersion: {
-            select: {
-              id: true,
-              version: true,
-              source: {
-                select: {
-                  code: true,
-                  name: true,
-                  permissionStatus: true,
-                  attributionRequired: true,
-                  attributionText: true,
-                  priority: true,
-                },
-              },
-            },
-          },
-        },
-      },
-    },
-  });
-
-  if (!food) {
-    return calculationError(
-      "FOOD_NOT_FOUND",
-      "That food is not in the database.",
-    );
-  }
-
+): CalculationOutcome<NutritionCalculationResult> {
   const chosen = selectSourceVersion(food.nutrients, food.originSourceVersionId);
 
   if (!chosen) {
@@ -261,22 +269,11 @@ export async function calculateFoodNutrition(
 
     if (!found) {
       /*
-       * Either no such serving anywhere, or one belonging to another food. Both
-       * are reported as not-found: distinguishing them would confirm the
-       * existence of a row the caller has no business knowing about, and
-       * neither is actionable differently.
+       * Not on this food. Whether it exists on another is a separate question,
+       * and answering it needs a query — so the caller decides whether that is
+       * worth a round trip. See `calculateFoodNutrition`.
        */
-      const elsewhere = await client.foodServing.findUnique({
-        where: { id: input.servingId },
-        select: { id: true },
-      });
-
-      return elsewhere
-        ? calculationError(
-            "FOOD_SERVING_MISMATCH",
-            "That serving belongs to a different food.",
-          )
-        : calculationError("SERVING_NOT_FOUND", "That serving is not available.");
+      return calculationError("SERVING_NOT_FOUND", "That serving is not available.");
     }
 
     if (found.sourceVersionId !== chosen.id) {
@@ -342,4 +339,113 @@ export async function calculateFoodNutrition(
       },
     },
   };
+}
+
+// ---------------------------------------------------------------------------
+// Entry points
+// ---------------------------------------------------------------------------
+
+/** Loads one food with everything a calculation needs. */
+async function loadFoodForCalculation(foodId: string, client: PrismaClient) {
+  return client.food.findFirst({
+    where: { id: foodId, isActive: true },
+    select: FOOD_CALCULATION_SELECT,
+  });
+}
+
+/**
+ * Calculates the nutrition of one food at one quantity.
+ *
+ * Returns a typed error rather than throwing for every state a practitioner can
+ * reach: an unknown food, a serving with no published weight, a food with no
+ * nutrition data. Those are facts about the data, not exceptions.
+ *
+ * `client` defaults to the shared connection so application callers pass only
+ * the input. It is injectable for the same reason `runDatasetImport` takes one:
+ * a test must be able to run this exact code path against a disposable database
+ * rather than the one the application is pointed at.
+ */
+export async function calculateFoodNutrition(
+  input: CalculateFoodNutritionInput,
+  client: PrismaClient = prisma,
+): Promise<CalculationOutcome<NutritionCalculationResult>> {
+  const food = await loadFoodForCalculation(input.foodId, client);
+
+  if (!food) {
+    return calculationError("FOOD_NOT_FOUND", "That food is not in the database.");
+  }
+
+  const result = computeFoodNutrition(food, input);
+
+  /*
+   * "No such serving" and "that serving belongs to another food" are different
+   * things to tell a practitioner, and telling them apart costs one query. It
+   * runs only on the error path, so the happy path stays a single round trip.
+   */
+  if (!result.ok && result.error.code === "SERVING_NOT_FOUND" && input.servingId) {
+    const elsewhere = await client.foodServing.findUnique({
+      where: { id: input.servingId },
+      select: { id: true },
+    });
+
+    if (elsewhere) {
+      return calculationError(
+        "FOOD_SERVING_MISMATCH",
+        "That serving belongs to a different food.",
+      );
+    }
+  }
+
+  return result;
+}
+
+/** One item of a batch calculation, tagged so results can be matched back. */
+export type BatchCalculationItem = CalculateFoodNutritionInput & {
+  /** Caller's own identifier, echoed on the result. */
+  key: string;
+};
+
+export type BatchCalculationEntry = {
+  key: string;
+  result: CalculationOutcome<NutritionCalculationResult>;
+};
+
+/**
+ * Calculates many foods from a single query.
+ *
+ * A day's plan can hold twenty items, and calling the single-food entry point
+ * per item would be twenty round trips for data that one `IN` clause returns.
+ * Distinct food ids are loaded once and reused across every item that
+ * references them, so the same food at three different quantities still costs
+ * one fetch.
+ *
+ * Each item gets its own outcome. One unusable item does not fail the batch —
+ * a plan with a broken row should still total the other fourteen, and the
+ * caller decides how to present the failure.
+ */
+export async function calculateFoodNutritionBatch(
+  items: readonly BatchCalculationItem[],
+  client: PrismaClient = prisma,
+): Promise<BatchCalculationEntry[]> {
+  if (items.length === 0) return [];
+
+  const foodIds = [...new Set(items.map((item) => item.foodId))];
+
+  const foods = await client.food.findMany({
+    where: { id: { in: foodIds }, isActive: true },
+    select: FOOD_CALCULATION_SELECT,
+  });
+
+  const byId = new Map(foods.map((food) => [food.id, food]));
+
+  return items.map((item) => {
+    const food = byId.get(item.foodId);
+
+    return {
+      key: item.key,
+      result: food
+        ? computeFoodNutrition(food, item)
+        : calculationError("FOOD_NOT_FOUND", "That food is not in the database."),
+    };
+  });
 }

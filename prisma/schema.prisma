@@ -244,11 +244,12 @@ model Organization {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  members      OrganizationMember[]
-  subscription Subscription?
-  invitations  OrganizationInvitation[]
-  clients      Client[]
-  assessments  NutritionAssessment[]
+  members        OrganizationMember[]
+  subscription   Subscription?
+  invitations    OrganizationInvitation[]
+  clients        Client[]
+  assessments    NutritionAssessment[]
+  nutritionPlans NutritionPlan[]
 
   /// Dashboards list active organizations by recency; slug already has a unique
   /// index and needs no second one.
@@ -310,10 +311,11 @@ model OrganizationMember {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization        Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  user                UserProfile           @relation(fields: [userId], references: [id], onDelete: Restrict)
-  clientAssignments   ClientAssignment[]
-  assessmentsAuthored NutritionAssessment[]
+  organization           Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  user                   UserProfile           @relation(fields: [userId], references: [id], onDelete: Restrict)
+  clientAssignments      ClientAssignment[]
+  assessmentsAuthored    NutritionAssessment[]
+  nutritionPlansAuthored NutritionPlan[]
 
   /// One membership per person per organization. Changing someone's role
   /// updates this row rather than adding another.
@@ -432,10 +434,11 @@ model Client {
   createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
   updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
 
-  organization Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  createdBy    UserProfile?          @relation("ClientsCreated", fields: [createdById], references: [id], onDelete: SetNull)
-  assignments  ClientAssignment[]
-  assessments  NutritionAssessment[]
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  createdBy      UserProfile?          @relation("ClientsCreated", fields: [createdById], references: [id], onDelete: SetNull)
+  assignments    ClientAssignment[]
+  assessments    NutritionAssessment[]
+  nutritionPlans NutritionPlan[]
 
   /// Client numbers are unique per practice, and this also serves the
   /// "open client VYM-000124" lookup.
@@ -580,6 +583,7 @@ model NutritionAssessment {
   organization    Organization       @relation(fields: [organizationId], references: [id], onDelete: Restrict)
   client          Client             @relation(fields: [clientId], references: [id], onDelete: Restrict)
   createdByMember OrganizationMember @relation(fields: [createdByMemberId], references: [id], onDelete: Restrict)
+  nutritionPlans  NutritionPlan[]
 
   /// The history query: one client's assessments, newest first.
   @@index([clientId, assessmentDate(sort: Desc)])
@@ -880,6 +884,7 @@ model NutritionSourceVersion {
   servings         FoodServing[]
   nutrientMappings SourceNutrientMapping[]
   referenceRules   ReferenceRule[]
+  planItems        NutritionPlanItem[]
 
   /// One row per release of a source. This pair is also the natural key the
   /// importer resolves from configuration.
@@ -979,6 +984,7 @@ model Food {
   sourceFoods         SourceFood[]
   unitConversions     UnitConversion[]
   servings            FoodServing[]
+  planItems           NutritionPlanItem[]
 
   /// Idempotency key for imports. Re-running an import finds the food it
   /// created last time instead of inserting a second copy.
@@ -1376,6 +1382,7 @@ model FoodServing {
 
   food          Food                   @relation(fields: [foodId], references: [id], onDelete: Cascade)
   sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+  planItems     NutritionPlanItem[]
 
   /// One serving of a given name per food per release, so a re-import updates
   /// rather than accumulating.
@@ -1604,4 +1611,141 @@ enum ReferenceUnit {
   FACTOR
 
   @@map("reference_unit")
+}
+
+// ---------------------------------------------------------------------------
+// Nutrition plans — Phase 8E
+//
+// The bridge between "what is in this food" (8C) and "what does this client
+// need" (8D). A plan holds the *inputs* a dietitian chose; every nutrient
+// total, percentage and gap is derived from them on read.
+//
+// WHY THESE TWO TABLES EXIST
+//
+// The analysis engine is pure and needs no storage. What needs storage is the
+// dietitian's work: which foods, which servings, what quantities. Losing that
+// on a page refresh would make the feature unusable, and there is nowhere else
+// in the schema to put it.
+//
+// WHAT IS DELIBERATELY NOT STORED
+//
+// No calories, no macros, no micronutrient totals, no percentages, no target
+// comparison. Every one of those is a function of the inputs plus a source
+// release, and a stored copy goes stale the moment a dataset is corrected or a
+// reference is licensed. See docs/nutrition-analysis.md.
+// ---------------------------------------------------------------------------
+
+/// Where in the day an item sits.
+///
+/// The five slots Indian practice actually uses, matching the meal structure in
+/// CLAUDE.md. Ordering for display comes from the enum position, not from a
+/// separate column.
+enum MealSlot {
+  BREAKFAST
+  MID_MORNING
+  LUNCH
+  EVENING_SNACK
+  DINNER
+
+  @@map("meal_slot")
+}
+
+/// One day of planned food for a client.
+///
+/// Tenant-owned clinical data, unlike the global food and reference tables:
+/// `organizationId` is denormalised from the client exactly as
+/// NutritionAssessment does it, so every policy and query can scope without a
+/// join.
+///
+/// REPRODUCIBILITY
+///
+/// `assessmentId` pins which assessment the targets were derived from. Without
+/// it, editing a client's weight would retroactively change what a plan was
+/// compared against, and a plan reviewed last month could no longer be
+/// explained. Per-item source pinning does the same job for food values.
+model NutritionPlan {
+  id             String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  organizationId String @map("organization_id") @db.Uuid
+  clientId       String @map("client_id") @db.Uuid
+
+  /// The membership that created it. Attribution belongs to a role within one
+  /// practice, matching NutritionAssessment.
+  createdByMemberId String @map("created_by_member_id") @db.Uuid
+
+  /// Which assessment supplied the targets this plan is measured against.
+  /// Null when the client had none at the time — the plan still totals its
+  /// food, it simply has nothing to compare against.
+  assessmentId String? @map("assessment_id") @db.Uuid
+
+  name String @db.VarChar(120)
+
+  /// The day this plan is for. A calendar date, like assessmentDate.
+  planDate DateTime @map("plan_date") @db.Date
+
+  notes String? @db.Text
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  organization    Organization         @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  client          Client               @relation(fields: [clientId], references: [id], onDelete: Restrict)
+  createdByMember OrganizationMember   @relation(fields: [createdByMemberId], references: [id], onDelete: Restrict)
+  assessment      NutritionAssessment? @relation(fields: [assessmentId], references: [id], onDelete: Restrict)
+  items           NutritionPlanItem[]
+
+  /// The history query: one client's plans, newest first.
+  @@index([clientId, planDate(sort: Desc)])
+  @@index([organizationId])
+  @@index([createdByMemberId])
+  @@index([assessmentId])
+  @@map("nutrition_plans")
+}
+
+/// One food, at one quantity, in one meal slot.
+///
+/// The unit of a dietitian's decision, and the only nutrition data stored: the
+/// nutrient amounts it implies are calculated by the Phase 8C engine on every
+/// read.
+model NutritionPlanItem {
+  id     String @id @default(dbgenerated("gen_random_uuid()")) @db.Uuid
+  planId String @map("plan_id") @db.Uuid
+
+  mealSlot MealSlot @map("meal_slot")
+
+  /// Ordering within a slot, so a dietitian's arrangement survives a reload.
+  position Int @default(0)
+
+  foodId String @map("food_id") @db.Uuid
+
+  /// Set when the quantity is expressed in servings. Null for a gram quantity.
+  servingId String? @map("serving_id") @db.Uuid
+
+  /// The quantity, exactly as entered. Decimal, never Float — half a serving is
+  /// 0.5 and must round-trip as 0.5.
+  quantity Decimal @db.Decimal(12, 4)
+
+  /// "GRAM" or "SERVING". A string rather than an enum because the vocabulary
+  /// belongs to the Phase 8C engine, which validates it; duplicating it as a
+  /// database enum would create two definitions that could drift apart.
+  unit String @db.VarChar(20)
+
+  /// Which release the food values were read from when this item was added.
+  ///
+  /// Pinned so a later dataset import cannot silently change a plan a
+  /// practitioner already reviewed. The engine resolves one release per
+  /// calculation; this records which one it chose.
+  sourceVersionId String? @map("source_version_id") @db.Uuid
+
+  createdAt DateTime @default(now()) @map("created_at") @db.Timestamptz(6)
+  updatedAt DateTime @default(now()) @updatedAt @map("updated_at") @db.Timestamptz(6)
+
+  plan          NutritionPlan           @relation(fields: [planId], references: [id], onDelete: Cascade)
+  food          Food                    @relation(fields: [foodId], references: [id], onDelete: Restrict)
+  serving       FoodServing?            @relation(fields: [servingId], references: [id], onDelete: Restrict)
+  sourceVersion NutritionSourceVersion? @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
+
+  /// The rendering query: a plan's items, grouped by slot, in order.
+  @@index([planId, mealSlot, position])
+  @@index([foodId])
+  @@map("nutrition_plan_items")
 }

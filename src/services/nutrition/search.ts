@@ -47,7 +47,7 @@ export type FoodSearchResult = {
   preparationState: PreparationState;
   /** Where this record came from — never hidden from the practitioner. */
   source: { code: string; name: string; version: string } | null;
-  servings: { label: string; weightGrams: string | null }[];
+  servings: { id: string; label: string; weightGrams: string | null }[];
   /** How many nutrient values this food carries. */
   nutrientCount: number;
 };
@@ -129,7 +129,12 @@ export async function searchFoods(params: FoodSearchParams): Promise<FoodSearchP
           select: { version: true, source: { select: { code: true, name: true } } },
         },
         servings: {
-          select: { label: true, weightGrams: true },
+          /*
+           * The id is needed to add a food to a plan by serving: a portion is
+           * identified by id, never by its label, which is not unique across
+           * releases.
+           */
+          select: { id: true, label: true, weightGrams: true },
           orderBy: [{ isDefault: "desc" }, { label: "asc" }],
         },
         _count: { select: { nutrients: true } },
@@ -152,6 +157,7 @@ export async function searchFoods(params: FoodSearchParams): Promise<FoodSearchP
           }
         : null,
       servings: food.servings.map((serving) => ({
+        id: serving.id,
         label: serving.label,
         // Decimal → string, never a float. A portion weight is reference data.
         weightGrams: serving.weightGrams?.toString() ?? null,

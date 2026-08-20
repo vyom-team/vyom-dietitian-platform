@@ -25,7 +25,7 @@ Therefore:
   not so you build toward it early.
 - If a request seems to fall outside the current phase, **ask** — do not assume.
 
-**Current phase:** `PHASE 8D — Nutrition Target Engine (architecture)`
+**Current phase:** `PHASE 8E — Nutrition Analysis & Target Matching`
 
 Implemented so far: project foundation (0), application shell and design system
 (1), Supabase/Prisma database foundation (2), authentication with role-based
@@ -34,10 +34,11 @@ staff management with invitations (5), the client management foundation (6),
 the nutrition assessment foundation (7), the nutrition data foundation
 (8A), dataset ingestion with a real Indian food database (8B), and the
 deterministic food nutrition calculation engine with its food database UI
-(8C), and the nutrition target architecture (8D).
+(8C), the nutrition target architecture (8D), and nutrition plans with
+automatic target matching (8E).
 
-Still absent by design: meal plans, recipes, progress tracking, client portal,
-and billing. The Client model holds no clinical data — that lives on
+Still absent by design: dietary rules, meal-plan templates, recipes, review and
+publishing, progress tracking, client portal, and billing. The Client model holds no clinical data — that lives on
 NutritionAssessment.
 
 **Nutrition targets are architecture, not numbers.** Phase 8D built the
@@ -47,6 +48,13 @@ registered but unacquired and `PERMISSION_REQUIRED`. Eight of nine target types
 return `REFERENCE_REQUIRED`. Resting energy (Mifflin-St Jeor) is the sole
 exception, and carries a US-population caveat. A test asserts the reference
 table is empty — see `docs/nutrition-targets.md`.
+
+**Phase 8E composes, it does not calculate.** A nutrition plan stores only what
+a dietitian chose — food, serving, quantity, slot — and every total, percentage
+and gap is derived on read by combining 8C's food values with 8D's targets.
+Nothing is cached, which is why there is no "Calculate" button. Missing stays
+missing on both sides, and units are never silently converted between the two
+engines. See `docs/nutrition-analysis.md`.
 
 **The food database holds real data.** 1,014 Indian recipes from INDB 2024.11,
 with serving sizes. IFCT is held as a PDF only — ICMR-NIN denies text

@@ -1,7 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { ClipboardList, Pencil, Target } from "lucide-react";
+import { CalendarRange, ClipboardList, Pencil, Target } from "lucide-react";
 
 import {
   ArchiveClientButton,
@@ -191,6 +191,12 @@ export default async function ClientProfilePage({
                   * Offered only once an assessment exists: targets are derived
                   * from one, and a link to an empty-state page is a dead end.
                   */}
+                <Button variant="outline" size="sm" asChild>
+                  <Link href={`/clients/${client.id}/nutrition-plans`}>
+                    <CalendarRange className="size-4" aria-hidden="true" />
+                    Nutrition plans
+                  </Link>
+                </Button>
                 <Button variant="outline" size="sm" asChild>
                   <Link href={`/clients/${client.id}/nutrition-targets`}>
                     <Target className="size-4" aria-hidden="true" />

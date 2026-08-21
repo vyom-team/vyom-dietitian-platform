@@ -1,5 +1,3 @@
-import "server-only";
-
 import type { PrismaClient } from "@/generated/prisma/client";
 import { parseCsv } from "@/lib/nutrition/ingest/csv";
 import {
@@ -32,6 +30,10 @@ import {
  *
  * Takes a PrismaClient rather than importing one, so the same code path serves
  * the CLI and the tests.
+ *
+ * Deliberately no `server-only` guard, matching the other ingestion services:
+ * this module is run by tsx from the command line, outside Next, where that
+ * import throws. The web application never reaches it.
  */
 
 export type ReferenceImportRowError = {
@@ -179,6 +181,11 @@ export async function runReferenceImport(
   let updated = 0;
 
   for (const row of rows) {
+    /*
+     * valueType is part of the key. An EAR, an RDA and a Tolerable Upper Limit
+     * for the same nutrient, sex and age band are three separate statements the
+     * publication makes; keying without it kept only the last one written.
+     */
     const where = {
       sourceVersionId: version.id,
       ruleType: row.ruleType,
@@ -188,10 +195,10 @@ export async function runReferenceImport(
       ageMinYears: row.ageMinYears,
       ageMaxYears: row.ageMaxYears,
       physiologicalState: row.physiologicalState,
+      valueType: row.valueType,
     };
 
     const data = {
-      valueType: row.valueType,
       value: row.value,
       valueMin: row.valueMin,
       valueMax: row.valueMax,

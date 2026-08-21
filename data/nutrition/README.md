@@ -34,7 +34,7 @@ its checksum stops meaning anything.
 |---|---|---|---|---|---|---|
 | **IFCT** ICMR-NIN | 2017 | ✅ PDF + extracted CSV | PDF 585 pp; CSV 542 rows | Allowed | `PERMISSION_REQUIRED` | ✅ **Imported** |
 | **INDB** Anuvaad | 2024.11 | ✅ XLSX | XLSX, 1,014 recipes | Allowed | `UNKNOWN` | ✅ **Imported** |
-| **ICMR-NIN RDA/EAR** | 2020 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
+| **ICMR-NIN RDA/EAR** | 2020 | ✅ text extraction | CSV, 343 pp of lines | Allowed | `PERMISSION_REQUIRED` | ⚠️ **Partial** — 46 adult rules |
 | **ICMR-NIN Dietary Guidelines** | 2024 | ❌ | PDF | — | `PERMISSION_REQUIRED` | Reference only |
 | **USDA FoodData Central** | 2026-04 | ❌ | CSV / JSON | — | `UNKNOWN` | Not acquired |
 

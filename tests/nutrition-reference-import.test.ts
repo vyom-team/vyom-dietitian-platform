@@ -30,6 +30,8 @@ import {
  * it can never be mistaken for an ICMR-NIN value.
  */
 
+const NEWLINE = String.fromCharCode(10);
+
 const enabled = hasRlsDatabase() && (await isRlsDatabaseReachable());
 const run = `ref${Date.now().toString(36)}`;
 const VERSION = `test-${run}`;
@@ -318,6 +320,41 @@ describe.skipIf(!enabled)("reference import", () => {
     expect(result.byRuleType.map((entry) => entry.ruleType)).toContain(
       "MICRONUTRIENT_INTAKE",
     );
+  });
+
+  it("keeps EAR, RDA and UL for one population as three rows", async () => {
+    /*
+     * They share every applicability column, so a key without value_type kept
+     * only the last one written — and that was usually the UL, turning a safety
+     * ceiling into a target.
+     */
+    const threeValues = [
+      "rule_type,nutrient,rule_key,sex,age_min,age_max,value,unit,value_type",
+      "MICRONUTRIENT_INTAKE,IRON,,MALE,19,130,11,MG_PER_DAY,EAR",
+      "MICRONUTRIENT_INTAKE,IRON,,MALE,19,130,19,MG_PER_DAY,RDA",
+      "MICRONUTRIENT_INTAKE,IRON,,MALE,19,130,45,MG_PER_DAY,UL",
+    ].join(NEWLINE);
+
+    const result = await runReferenceImport({
+      prisma,
+      manifest: manifest({ version: `${VERSION}-three` }),
+      fileContents: threeValues,
+    });
+
+    expect(result.failed).toBe(0);
+    expect(result.created).toBe(3);
+
+    const stored = await prisma.referenceRule.findMany({
+      where: { sourceVersion: { version: `${VERSION}-three` } },
+      select: { valueType: true, value: true },
+      orderBy: { valueType: "asc" },
+    });
+
+    expect(stored).toHaveLength(3);
+    const byType = new Map(stored.map((r) => [r.valueType, r.value?.toString()]));
+    expect(byType.get("EAR")).toBe("11");
+    expect(byType.get("RDA")).toBe("19");
+    expect(byType.get("UL")).toBe("45");
   });
 
   it("is idempotent — a second run updates rather than duplicates", async () => {

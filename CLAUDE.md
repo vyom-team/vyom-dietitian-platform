@@ -41,13 +41,15 @@ Still absent by design: dietary rules, meal-plan templates, recipes, review and
 publishing, progress tracking, client portal, and billing. The Client model holds no clinical data — that lives on
 NutritionAssessment.
 
-**Nutrition targets are architecture, not numbers.** Phase 8D built the
-reference-rule schema, the resolver, the pipeline, and the UI — and populated
-**nothing**. `reference_rules` ships empty because ICMR-NIN RDA/EAR 2020 is
-registered but unacquired and `PERMISSION_REQUIRED`. Eight of nine target types
-return `REFERENCE_REQUIRED`. Resting energy (Mifflin-St Jeor) is the sole
-exception, and carries a US-population caveat. A test asserts the reference
-table is empty — see `docs/nutrition-targets.md`.
+**Nutrition targets are partly populated.** Phase 8D built the reference-rule
+schema, the resolver, the pipeline and the UI. ICMR-NIN RDA/EAR 2020 has since
+been acquired and **46 adult micronutrient rules** imported — extracted from the
+publication's own text by `npm run nutrition:extract-rda`, which refuses to
+write unless every figure matches the publication's summary tables. Nine
+micronutrients resolve for adults; energy, protein, fat, carbohydrate and fibre
+still return `REFERENCE_REQUIRED`, and so does every nutrient for anyone under
+19. A **Tolerable Upper Limit is never selected as a target** — it is a safety
+ceiling. See `docs/nutrition-targets.md`.
 
 **Phase 8E composes, it does not calculate.** A nutrition plan stores only what
 a dietitian chose — food, serving, quantity, slot — and every total, percentage

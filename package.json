@@ -23,6 +23,7 @@
     "nutrition:import": "tsx scripts/nutrition/import.ts",
     "nutrition:import-source": "tsx scripts/nutrition/import-source.ts",
     "nutrition:import-references": "tsx scripts/nutrition/import-references.ts",
+    "nutrition:extract-rda": "tsx scripts/nutrition/extract-rda-2020.ts",
     "nutrition:report": "tsx scripts/nutrition/report.ts",
     "nutrition:verify": "tsx scripts/nutrition/verify.ts",
     "postinstall": "prisma generate",

@@ -87,6 +87,15 @@ export function resolveRule(
   const sex = referenceSexFor(inputs.gender);
 
   const applicable = ofType.filter((rule) => {
+    /*
+     * A Tolerable Upper Intake Level is a SAFETY CEILING, not a target. It is
+     * the amount above which harm becomes plausible, and presenting it as
+     * something to aim for would invert its meaning — iron's UL is 45 mg
+     * against an RDA of 19. It is stored, because a later rules layer should be
+     * able to warn when a plan approaches it, but it is never a target.
+     */
+    if (rule.valueType === "UL") return false;
+
     if (rule.physiologicalState !== inputs.physiologicalState) return false;
 
     /*
@@ -116,6 +125,18 @@ export function resolveRule(
   }
 
   const ranked = [...applicable].sort((a, b) => {
+    /*
+     * RDA before EAR before anything else.
+     *
+     * ICMR-NIN recommends the EAR for population adequacy work; the RDA is the
+     * figure a practitioner plans an individual against, and it is the one this
+     * product shows. Both are imported and both keep their own label, so a
+     * later phase can offer the choice — this only decides which is picked when
+     * a caller asks for "the" target.
+     */
+    const byValueType = valueTypeRank(a.valueType) - valueTypeRank(b.valueType);
+    if (byValueType !== 0) return byValueType;
+
     // Sex-specific before ANY.
     const bySex = specificity(a.sexApplicability) - specificity(b.sexApplicability);
     if (bySex !== 0) return bySex;
@@ -129,6 +150,14 @@ export function resolveRule(
   });
 
   return { matched: true, rule: ranked[0]! };
+}
+
+/** Lower sorts first. UL is excluded before ranking and never appears here. */
+function valueTypeRank(valueType: ReferenceRuleData["valueType"]): number {
+  if (valueType === "RDA") return 0;
+  if (valueType === "EAR") return 1;
+  if (valueType === "AI") return 2;
+  return 3;
 }
 
 /** Lower sorts first: a named sex is more specific than ANY. */

@@ -308,6 +308,44 @@ describe("reference rule resolution", () => {
     expect(result.matched && result.rule.id).toBe("ca");
   });
 
+  it("never selects a Tolerable Upper Limit as a target", () => {
+    /*
+     * A UL is a safety ceiling, not something to aim for. Iron's UL is 45 mg
+     * against an RDA of 19; presenting the UL as a target inverts its meaning.
+     */
+    const ul = rule({ id: "ul", valueType: "UL", value: "45" });
+
+    const onlyUl = resolveRule([ul], { ruleType: "PROTEIN_PER_KG" }, inputs());
+    expect(onlyUl).toEqual({ matched: false, reason: "NO_APPLICABLE_POPULATION" });
+
+    const withRda = resolveRule(
+      [ul, rule({ id: "rda", valueType: "RDA", value: "19" })],
+      { ruleType: "PROTEIN_PER_KG" },
+      inputs(),
+    );
+    expect(withRda.matched && withRda.rule.value).toBe("19");
+  });
+
+  it("prefers the RDA over the EAR", () => {
+    const ear = rule({ id: "ear", valueType: "EAR", value: "11" });
+    const rda = rule({ id: "rda", valueType: "RDA", value: "19" });
+
+    const forward = resolveRule([ear, rda], { ruleType: "PROTEIN_PER_KG" }, inputs());
+    const reversed = resolveRule([rda, ear], { ruleType: "PROTEIN_PER_KG" }, inputs());
+
+    expect(forward.matched && forward.rule.valueType).toBe("RDA");
+    expect(reversed.matched && reversed.rule.valueType).toBe("RDA");
+  });
+
+  it("falls back to the EAR when no RDA exists", () => {
+    const result = resolveRule(
+      [rule({ id: "ear", valueType: "EAR", value: "11" })],
+      { ruleType: "PROTEIN_PER_KG" },
+      inputs(),
+    );
+    expect(result.matched && result.rule.valueType).toBe("EAR");
+  });
+
   it("is deterministic when two rules are equally specific", () => {
     const a = rule({ id: "aaa" });
     const b = rule({ id: "bbb" });

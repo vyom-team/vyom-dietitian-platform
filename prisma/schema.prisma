@@ -1578,14 +1578,20 @@ model ReferenceRule {
   sourceVersion NutritionSourceVersion @relation(fields: [sourceVersionId], references: [id], onDelete: Restrict)
   nutrient      Nutrient?              @relation(fields: [nutrientId], references: [id], onDelete: Restrict)
 
-  /// Idempotency key for a future importer. Declared with an explicit name
+  /// Idempotency key for the importer. `valueType` is part of it: an EAR, an
+  /// RDA and a Tolerable Upper Limit for the same nutrient, sex and age band
+  /// are three separate statements the publication makes, and collapsing them
+  /// left only the last one written — usually the UL, which is a safety ceiling
+  /// rather than a target.
+  ///
+  /// Declared with an explicit name
   /// because Prisma's generated name for eight columns exceeds the 63-character
   /// identifier limit and gets truncated to something unreadable.
   ///
   /// The migration creates it with NULLS NOT DISTINCT, which Prisma cannot yet
   /// express: several columns are legitimately null, and default Postgres
   /// semantics would let two identical rules coexist.
-  @@unique([sourceVersionId, ruleType, ruleKey, nutrientId, sexApplicability, ageMinYears, ageMaxYears, physiologicalState], map: "reference_rules_applicability_key")
+  @@unique([sourceVersionId, ruleType, ruleKey, nutrientId, sexApplicability, ageMinYears, ageMaxYears, physiologicalState, valueType], map: "reference_rules_applicability_key")
   /// Resolution query: rule type first, then narrow by applicability.
   @@index([ruleType, isActive])
   @@index([sourceVersionId])

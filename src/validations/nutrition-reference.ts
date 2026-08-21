@@ -119,17 +119,29 @@ export const referenceManifestSchema = z
     version: z.string().min(1).max(40),
 
     /**
-     * Data file, relative to NUTRITION_DATA_DIR. Path separators and parent
-     * references are refused: a manifest is configuration and must not be able
-     * to point the importer at an arbitrary location on disk.
+     * Data file, relative to NUTRITION_DATA_DIR.
+     *
+     * A forward-slash subdirectory is allowed — extracted files belong in
+     * `processed/`, per data/nutrition/README.md. Parent references, absolute
+     * paths and backslashes are refused, and `resolveDatasetFile`
+     * independently verifies the resolved path lands inside the data
+     * directory. A manifest is configuration and must not be able to point the
+     * importer somewhere else.
      */
     file: z
       .string()
       .min(1)
-      .refine((value) => !value.includes("..") && !/[\\/]/.test(value), {
-        message:
-          "file must be a plain file name inside the nutrition data directory — no path separators or parent references",
-      }),
+      .refine(
+        (value) =>
+          !value.includes("..") &&
+          !value.includes("\\") &&
+          !value.startsWith("/") &&
+          !/^[A-Za-z]:/.test(value),
+        {
+          message:
+            "file must be inside the nutrition data directory — no parent references, absolute paths, or backslashes",
+        },
+      ),
 
     format: z.enum(["csv"]).default("csv"),
     delimiter: z.string().length(1).default(","),

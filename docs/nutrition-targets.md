@@ -10,30 +10,44 @@ declines to say.
 
 ---
 
-## Read this first: almost nothing is calculable yet
+## What is calculable today
 
-**Eight of the nine target types return `REFERENCE_REQUIRED`.**
-
-That is the accurate state of this repository, not an unfinished feature. The
-ICMR-NIN *Recommended Dietary Allowances and Estimated Average Requirements*
-(2020) is registered as a source, is marked `PERMISSION_REQUIRED`, and **has not
-been acquired**. See [`data/nutrition/README.md`](../data/nutrition/README.md).
+ICMR-NIN RDA/EAR 2020 has been acquired and partially imported: **46 adult
+micronutrient rules**, extracted from the publication's own text and
+cross-checked against its summary tables. Energy and the macronutrient targets
+are still blocked.
 
 | Target | Status | Needs |
 |---|---|---|
 | Resting energy (BMR) | ✅ **Calculated** | Mifflin-St Jeor (published equation) |
+| **9 micronutrients** | ✅ **Calculated**, adults 19-130, per sex | — |
 | Total energy expenditure | ❌ `REFERENCE_REQUIRED` | Activity factors |
-| Daily energy target | ❌ `REFERENCE_REQUIRED` | Goal adjustments |
-| Protein | ❌ `REFERENCE_REQUIRED` | g/kg reference |
-| Fat | ❌ `REFERENCE_REQUIRED` | % of energy |
+| Daily energy target | ❌ `REFERENCE_REQUIRED` | Goal adjustments (PRD, not ICMR) |
+| Protein | ❌ `REFERENCE_REQUIRED` | Table 5.21 not yet extracted |
+| Fat | ❌ `REFERENCE_REQUIRED` | % of energy — the publication states visible-fat grams instead |
 | Carbohydrate | ❌ `DEPENDS_ON_UNAVAILABLE` | Protein + fat first |
-| Fibre | ❌ `REFERENCE_REQUIRED` | g/day reference |
-| Micronutrients (all 40) | ❌ `REFERENCE_REQUIRED` | ICMR-NIN RDA/EAR tables |
+| Fibre | ❌ `REFERENCE_REQUIRED` | Table 7.4 not yet extracted |
+| Remaining 29 micronutrients | ❌ `REFERENCE_REQUIRED` | Tables not yet extracted |
+| Children and adolescents | ❌ `POPULATION_UNSUPPORTED` | Age-banded rows not extracted |
+| Pregnancy / lactation | 🚫 **Unsupported** | No physiological state on the assessment |
 | BMI classification | 🚫 **Out of scope** | Asian-Indian cutoffs (PRD) |
 
-Supplying those values is a **data** task, not a code task. The pipeline is
-written in full; importing licensed rows makes each stage start working without
-anyone touching the engine.
+Calcium, iron, zinc, magnesium, phosphorus, vitamin A, vitamin C, vitamin D and
+folate resolve for adults. Everything else is a **data** task, not a code task —
+the pipeline is written in full, and importing more rows makes each stage start
+working without anyone touching the engine.
+
+### A Tolerable Upper Limit is never a target
+
+ULs are imported and stored, because a later rules layer should be able to warn
+when a plan approaches one. The resolver **excludes them from target
+selection**: iron's UL is 45 mg against an RDA of 19, and presenting a safety
+ceiling as something to aim for inverts its meaning.
+
+Where both are published, the **RDA** is selected. ICMR-NIN recommends the EAR
+for population adequacy work; the RDA is what a practitioner plans an individual
+against. Both are stored with their own label, so a later phase can offer the
+choice.
 
 ---
 
